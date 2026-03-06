@@ -1,0 +1,5 @@
+[data]
+{{- if eq .chezmoi.os "linux" }}
+    user_lustre = {{ promptStringOnce . "user_lustre" "What is the USER_LUSTRE path for this cluster?" | quote }}
+    group_lustre = {{ promptStringOnce . "group_lustre" "What is the GROUP_LUSTRE path for this cluster?" | quote }}
+{{- end }}
