@@ -6,6 +6,22 @@ set -euo pipefail
 export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
 export AQUA_GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/aquaproj-aqua/aqua.yaml"
 
+# Use GitHub token if set (avoids API rate limit when fetching release info)
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  export AQUA_GITHUB_TOKEN="${GITHUB_TOKEN}"
+fi
+
 echo "==> Installing aqua-managed tools..."
+# Don't exit on aqua failure so one bad package doesn't stop the rest of chezmoi apply.
+# aqua may stop at first failure; a retry can help with flaky networks.
+set +e
 aqua i -a
+ret=$?
+set -e
+if [ "$ret" -ne 0 ]; then
+  echo "==> First pass exited with $ret. Retrying..." >&2
+  aqua i -a || true
+  echo "==> If some tools are still missing, run 'aqua list -installed' and fix or remove the failing package in aqua.yaml, then run 'aqua i -a'." >&2
+  exit $ret
+fi
 echo "==> aqua tools installed successfully"

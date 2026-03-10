@@ -77,3 +77,7 @@ chezmoi update    # pull latest changes and apply
 - Linux (arm64, amd64)
 
 No package managers (brew, apt, etc.) are used for tool installation. Everything is user-space.
+
+### GitHub API rate limit
+
+The aqua binary is installed from a **pinned version** (see `run_once_before_install-aqua.sh`) so the installer never calls GitHub's "latest release" API, avoiding 403 rate limits when unauthenticated. If you see "API rate limit exceeded" when installing *tools* (`aqua i -a`), set `GITHUB_TOKEN` or `AQUA_GITHUB_TOKEN` (e.g. a [fine-grained PAT](https://github.com/settings/tokens) with no scopes) for a higher limit; the install script passes it through when set.
