@@ -11,7 +11,14 @@ This is a [chezmoi](https://www.chezmoi.io/) dotfiles repo. chezmoi manages conf
 - `dot_*` files/dirs map to `~/.*` in the home directory (chezmoi naming convention)
 - `.chezmoiscripts/` contains scripts that run during `chezmoi apply`
 - `.chezmoi.toml.tmpl` is the chezmoi config template (prompts for machine-specific data)
+- `.chezmoiexternal.toml` declares archives/files to download from URLs (e.g., ble.sh)
 - `dot_config/aquaproj-aqua/aqua.yaml` declares CLI tools managed by aqua
+
+### Shell support
+
+- **macOS**: zsh (`dot_zshrc`)
+- **Linux**: bash (`dot_bashrc`) -- designed for remote servers/clusters
+- Both shells set up aqua PATH and AQUA_GLOBAL_CONFIG
 
 ### Script execution order
 
@@ -46,7 +53,22 @@ Script prefixes:
    ```
 3. That's it. The `run_onchange_after_01-install-aqua-tools.sh.tmpl` script will detect the config change and run `aqua i -a` on next `chezmoi apply`.
 
-### If the tool is NOT in aqua's registry
+### If the tool is a Python CLI (not in aqua)
+
+Use `uv tool install` (uv is managed by aqua). See `run_once_after_02-install-hf.sh` for an example.
+
+### If the tool is a non-binary archive (scripts, etc.)
+
+Use `.chezmoiexternal.toml` to download and extract it. Example (ble.sh):
+```toml
+[".local/share/blesh"]
+    type = "archive"
+    url = "https://github.com/akinomyoga/ble.sh/releases/download/v0.4.0-devel3/ble-0.4.0-devel3.tar.xz"
+    exact = true
+    stripComponents = 1
+```
+
+### If the tool needs a custom install script
 
 1. Create a new script in `.chezmoiscripts/`:
    - Name: `run_once_after_NN-install-<toolname>.sh` (increment NN)

@@ -1,0 +1,19 @@
+# Source system-wide bashrc if present (important for clusters/remote servers)
+[ -f /etc/bashrc ] && source /etc/bashrc
+
+# ble.sh: Bash Line Editor (syntax highlighting, autosuggestions, etc.)
+[[ $- == *i* ]] && [ -f "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" ] && source "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" --noattach
+
+export PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH"
+
+# aqua: declarative CLI version manager (https://aquaproj.github.io)
+export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
+export AQUA_GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/aquaproj-aqua/aqua.yaml"
+
+export TERM=xterm-256color
+export EDITOR=micro
+
+eval "$(starship init bash)"
+
+# ble.sh: attach after rest of bashrc has loaded
+[[ ${BLE_VERSION-} ]] && ble-attach
