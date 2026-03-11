@@ -1,0 +1,5 @@
+{{- if and (eq .chezmoi.os "linux") .user_lustre .group_lustre }}
+# Lustre paths for this cluster (set by chezmoi from promptStringOnce)
+export USER_LUSTRE="{{ .user_lustre }}"
+export GROUP_LUSTRE="{{ .group_lustre }}"
+{{- end }}
