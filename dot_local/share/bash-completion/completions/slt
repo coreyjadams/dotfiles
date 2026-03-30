@@ -1,0 +1,74 @@
+# bash completion for slt (Slurm Tools)
+
+_slt_completions() {
+    local cur prev cmd
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Find the subcommand (first non-flag argument after "slt")
+    cmd=""
+    for ((i=1; i < COMP_CWORD; i++)); do
+        case "${COMP_WORDS[i]}" in
+            -*) ;;
+            *) cmd="${COMP_WORDS[i]}"; break ;;
+        esac
+    done
+
+    # Complete values for flags that take arguments
+    case "$prev" in
+        -p|--partition)
+            local partitions
+            partitions=$(sinfo -h -o "%P" 2>/dev/null | tr -d '*')
+            COMPREPLY=( $(compgen -W "$partitions" -- "$cur") )
+            return ;;
+        -A|--account)
+            local accounts
+            accounts=$(sacctmgr -nP list account format=Account 2>/dev/null)
+            COMPREPLY=( $(compgen -W "$accounts" -- "$cur") )
+            return ;;
+        -u|--user)
+            local users
+            users=$(sacctmgr -nP list user format=User 2>/dev/null)
+            COMPREPLY=( $(compgen -W "$users" -- "$cur") )
+            return ;;
+        -t|--state)
+            COMPREPLY=( $(compgen -W "RUNNING PENDING COMPLETED FAILED
+                CANCELLED TIMEOUT NODE_FAIL PREEMPTED OUT_OF_MEMORY
+                SUSPENDED REQUEUED COMPLETING CONFIGURING" -- "$cur") )
+            return ;;
+        -d|--days)
+            COMPREPLY=( $(compgen -W "1 3 7 14 30 90" -- "$cur") )
+            return ;;
+        -j|--job)
+            # Complete with recent job IDs from the user's queue
+            local jobids
+            jobids=$(squeue -u "$USER" -h -o "%i" 2>/dev/null)
+            COMPREPLY=( $(compgen -W "$jobids" -- "$cur") )
+            return ;;
+    esac
+
+    # Complete subcommands or flags
+    case "$cmd" in
+        "")
+            COMPREPLY=( $(compgen -W "jobs group hist cluster fairshare" -- "$cur") )
+            ;;
+        jobs)
+            COMPREPLY=( $(compgen -W "-a --all -u --user -p --partition -t --state -h --help" -- "$cur") )
+            ;;
+        group)
+            COMPREPLY=( $(compgen -W "-A --account -p --partition -t --state -h --help" -- "$cur") )
+            ;;
+        hist)
+            COMPREPLY=( $(compgen -W "-d --days -u --user -j --job -t --state -h --help" -- "$cur") )
+            ;;
+        cluster)
+            COMPREPLY=( $(compgen -W "-p --partition -h --help" -- "$cur") )
+            ;;
+        fairshare)
+            COMPREPLY=( $(compgen -W "-u --user -A --account -a --all -l --long -h --help" -- "$cur") )
+            ;;
+    esac
+}
+
+complete -F _slt_completions slt

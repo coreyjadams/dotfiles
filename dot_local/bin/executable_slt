@@ -1,0 +1,1450 @@
+#!/usr/bin/env python3
+"""slt - Slurm Tools: better query tools for Slurm clusters.
+
+Wraps squeue, sacct, and sinfo with JSON parsing (Slurm 21.08+)
+and falls back to --format based parsing on older versions. Produces
+color-coded, human-friendly output using only the Python standard library.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timedelta
+
+
+# ---------------------------------------------------------------------------
+# ANSI colors
+# ---------------------------------------------------------------------------
+
+class _Color:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+
+C = _Color()
+
+# Disable colors when stdout is not a terminal
+if not sys.stdout.isatty():
+    for _attr in dir(C):
+        if not _attr.startswith("_"):
+            setattr(C, _attr, "")
+
+STATE_COLORS = {
+    "RUNNING":       C.GREEN,
+    "COMPLETING":    C.GREEN,
+    "COMPLETED":     C.BRIGHT_GREEN,
+    "PENDING":       C.YELLOW,
+    "REQUEUED":      C.YELLOW,
+    "PREEMPTED":     C.BRIGHT_YELLOW,
+    "SUSPENDED":     C.CYAN,
+    "CONFIGURING":   C.CYAN,
+    "FAILED":        C.RED,
+    "TIMEOUT":       C.BRIGHT_RED,
+    "NODE_FAIL":     C.BRIGHT_RED,
+    "OUT_OF_MEMORY": C.BRIGHT_RED,
+    "CANCELLED":     C.MAGENTA,
+}
+
+
+def _state_color(state: str) -> str:
+    base = state.split()[0].rstrip("+")
+    return STATE_COLORS.get(base, C.WHITE)
+
+
+def _colorize(text, color: str) -> str:
+    return f"{color}{text}{C.RESET}"
+
+
+# ---------------------------------------------------------------------------
+# Running Slurm commands
+# ---------------------------------------------------------------------------
+
+def _run(cmd, check=True, timeout=30):
+    """Run a command and return its stdout.
+
+    When check=False, non-zero exits and timeouts return None instead of
+    terminating the process.
+    """
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=timeout, check=check)
+        return r.stdout
+    except FileNotFoundError:
+        if not check:
+            return None
+        print(f"Error: '{cmd[0]}' not found. Is Slurm installed on this machine?",
+              file=sys.stderr)
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        if not check:
+            return None
+        print(f"Error: command timed out: {' '.join(cmd)}", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        if not check:
+            return None
+        print(f"Error: {' '.join(cmd)}\n  {e.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _slurm_json(cmd):
+    """Try running a Slurm command with --json; return parsed dict or None.
+
+    Uses a 15-second timeout so that the fallback to --parseable2 kicks in
+    quickly when --json is unsupported or the daemon is slow.
+    """
+    out = _run(cmd + ["--json"], check=False, timeout=15)
+    if out:
+        try:
+            return json.loads(out)
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _slurm_parseable(cmd, fields):
+    """Run a Slurm command with a custom --format and return a list of dicts.
+
+    Embeds a '|' delimiter directly in the format string so we don't rely
+    on --parseable / --parseable2 (not available on all Slurm versions for
+    all commands).
+    """
+    fmt_str = "|".join(fields)
+    out = _run(cmd + [f"--format={fmt_str}", "--noheader"])
+    rows = []
+    for line in out.strip().splitlines():
+        if not line:
+            continue
+        values = line.split("|")
+        row = {}
+        for i, field in enumerate(fields):
+            key = field.lstrip("%").split(":")[0]
+            row[key] = values[i].strip() if i < len(values) else ""
+        rows.append(row)
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def _term_width():
+    return shutil.get_terminal_size((120, 40)).columns
+
+
+def _print_table(headers, rows, row_colors=None):
+    """Print an aligned, color-coded table.
+
+    headers:    list of (label, min_width) tuples
+    rows:       list of lists (same length as headers)
+    row_colors: optional per-row ANSI color code
+    """
+    if not rows:
+        print(f"  {C.DIM}(no results){C.RESET}")
+        return
+
+    tw = _term_width()
+    widths = []
+    for i, (label, min_w) in enumerate(headers):
+        data_max = max(len(str(r[i])) for r in rows)
+        widths.append(max(len(label), min_w, data_max))
+
+    # Shrink widest columns if total exceeds terminal
+    gap = 2  # spaces between columns
+    total = sum(widths) + gap * (len(widths) - 1)
+    if total > tw:
+        excess = total - tw
+        shrinkable = sorted(
+            [(i, widths[i] - h[1]) for i, h in enumerate(headers) if widths[i] > h[1]],
+            key=lambda x: -x[1],
+        )
+        for idx, room in shrinkable:
+            cut = min(room, excess)
+            widths[idx] -= cut
+            excess -= cut
+            if excess <= 0:
+                break
+
+    hdr = ("  ".join(_colorize(label.ljust(widths[i]), C.BOLD)
+                     for i, (label, _) in enumerate(headers)))
+    sep = _colorize("─" * min(sum(widths) + gap * (len(widths) - 1), tw), C.DIM)
+    print(hdr)
+    print(sep)
+
+    for ri, row in enumerate(rows):
+        color = row_colors[ri] if row_colors else ""
+        cells = []
+        for ci, val in enumerate(row):
+            s = str(val)[:widths[ci]].ljust(widths[ci])
+            cells.append(f"{color}{s}{C.RESET}" if color else s)
+        print("  ".join(cells))
+
+
+def _format_duration(seconds) -> str:
+    """Format a number of seconds into a compact human string."""
+    if seconds is None:
+        return "-"
+    try:
+        seconds = int(seconds)
+    except (ValueError, TypeError):
+        return str(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m{seconds % 60:02d}s"
+    if seconds < 86400:
+        return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+    return f"{seconds // 86400}d{(seconds % 86400) // 3600:02d}h"
+
+
+def _parse_slurm_duration(s: str):
+    """Parse D-HH:MM:SS / HH:MM:SS / MM:SS into seconds, or None."""
+    if not s or s in ("UNLIMITED", "INVALID", "Partition_Limit"):
+        return None
+    try:
+        parts = [int(p) for p in s.replace("-", ":").split(":")]
+        if len(parts) == 4:
+            return parts[0] * 86400 + parts[1] * 3600 + parts[2] * 60 + parts[3]
+        if len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+        return parts[0]
+    except (ValueError, IndexError):
+        return None
+
+
+def _format_mem(mb) -> str:
+    """Format memory (given in MB) to human-readable."""
+    if mb is None:
+        return "-"
+    try:
+        mb = float(mb)
+    except (ValueError, TypeError):
+        return str(mb) if mb else "-"
+    if mb < 1024:
+        return f"{mb:.0f}M"
+    if mb < 1024 * 1024:
+        return f"{mb / 1024:.1f}G"
+    return f"{mb / (1024 * 1024):.1f}T"
+
+
+def _current_user():
+    return os.environ.get("USER") or os.getlogin()
+
+
+def _state_summary(states: dict) -> str:
+    parts = []
+    for k in sorted(states):
+        parts.append(f"{_colorize(str(states[k]), _state_color(k))} {k.lower()}")
+    return ", ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# JSON field accessors  --  Slurm's JSON schema changed across versions
+# (21.08, 22.05, 23.02, 23.11, 24.05+).  These helpers dig through the
+# most common shapes.
+# ---------------------------------------------------------------------------
+
+def _jget(obj, *keys, default=""):
+    """Walk a nested dict/list by keys; return default if any step fails."""
+    cur = obj
+    for k in keys:
+        if isinstance(cur, dict):
+            cur = cur.get(k, default)
+        elif isinstance(cur, list):
+            try:
+                cur = cur[k]
+            except (IndexError, TypeError):
+                return default
+        else:
+            return default
+        if cur is None:
+            return default
+    return cur
+
+
+def _extract_state(job) -> str:
+    raw = job.get("job_state", job.get("state", ""))
+    if isinstance(raw, list):
+        return raw[0] if raw else "UNKNOWN"
+    if isinstance(raw, dict):
+        cur = raw.get("current", raw.get("base", []))
+        if isinstance(cur, list):
+            return cur[0] if cur else "UNKNOWN"
+        return str(cur)
+    return str(raw)
+
+
+def _extract_elapsed(job):
+    """Return elapsed seconds from a job dict, or None."""
+    t = job.get("time", {})
+    if isinstance(t, dict):
+        e = t.get("elapsed", None)
+        if e is not None:
+            return int(e)
+    return None
+
+
+def _extract_gpus_from_tres(tres_str: str) -> int:
+    """Parse TRES string like 'cpu=4,mem=16G,node=1,billing=4,gres/gpu=2'."""
+    if not tres_str:
+        return 0
+    for part in tres_str.split(","):
+        if "gres/gpu=" in part:
+            try:
+                return int(part.split("=")[1])
+            except (ValueError, IndexError):
+                pass
+    return 0
+
+
+def _extract_tres_field(tres_str: str, field: str) -> str:
+    """Extract a value from a TRES string.
+
+    e.g. _extract_tres_field("cpu=1234,gres/gpuutil=75.2", "gres/gpuutil")
+         -> "75.2"
+    """
+    if not tres_str:
+        return ""
+    for part in tres_str.split(","):
+        if part.startswith(field + "="):
+            return part.split("=", 1)[1]
+    return ""
+
+
+def _format_gpu_util(val: str) -> str:
+    """Format a GPU utilization value with color coding."""
+    if not val or val == "-":
+        return "-"
+    try:
+        pct = float(val)
+    except (ValueError, TypeError):
+        return val
+    if pct >= 70:
+        color = C.GREEN
+    elif pct >= 30:
+        color = C.YELLOW
+    else:
+        color = C.RED
+    return _colorize(f"{pct:.0f}%", color)
+
+
+def _batch_gpu_util(job_ids):
+    """Query sacct for GPU utilization of specific jobs.
+
+    Returns dict of {job_id_str: formatted_gpu_util_str}.
+    Uses TRESUsageInAve which contains gres/gpuutil=<pct>.
+    """
+    if not job_ids:
+        return {}
+    ids_str = ",".join(str(j) for j in job_ids)
+    fields = ["JobID", "TRESUsageInAve%200"]
+    fmt_str = "|".join(fields)
+    out = _run(["sacct", "-j", ids_str, "--allocations",
+                f"--format={fmt_str}", "--noheader"], check=False)
+    result = {}
+    if not out:
+        return result
+    for line in out.strip().splitlines():
+        if not line.strip():
+            continue
+        parts = [v.strip() for v in line.split("|")]
+        if len(parts) < 2:
+            continue
+        jid = parts[0].split(".")[0]  # strip step suffix
+        tres = parts[1]
+        gpuutil = _extract_tres_field(tres, "gres/gpuutil")
+        gpumem = _extract_tres_field(tres, "gres/gpumem")
+        if gpuutil:
+            result[jid] = gpuutil
+        elif jid not in result:
+            result[jid] = ""
+    return result
+
+
+def _extract_gres_gpus(gres: str) -> int:
+    """Parse GRES string like 'gpu:a100:4' into GPU count."""
+    if not gres or gres in ("(null)",):
+        return 0
+    total = 0
+    for part in gres.split(","):
+        if part.startswith("gpu"):
+            segs = part.split(":")
+            for seg in reversed(segs):
+                try:
+                    total += int(seg)
+                    break
+                except ValueError:
+                    continue
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: jobs  (enhanced squeue)
+# ---------------------------------------------------------------------------
+
+_JOBS_HEADERS = [
+    ("JOBID",     8),
+    ("NAME",     16),
+    ("USER",      8),
+    ("PARTITION", 10),
+    ("STATE",    10),
+    ("TIME",      9),
+    ("NODES",     5),
+    ("GPUS",      4),
+    ("GPU%",      4),
+    ("NODELIST", 15),
+    ("REASON",   14),
+]
+
+
+def _jobs_from_json(data):
+    rows, colors = [], []
+    for job in data.get("jobs", []):
+        state = _extract_state(job)
+        elapsed = _extract_elapsed(job)
+
+        nodes = _jget(job, "node_count", "number", default="")
+        if isinstance(nodes, dict):
+            nodes = nodes.get("set", "")
+
+        gpus = 0
+        tres_alloc = _jget(job, "tres_req_str", default="")
+        if tres_alloc:
+            gpus = _extract_gpus_from_tres(str(tres_alloc))
+        if not gpus:
+            gpus = _extract_gres_gpus(str(_jget(job, "gres_detail", default="")))
+
+        reason = _jget(job, "state_reason", default="")
+        if isinstance(reason, dict):
+            reason = reason.get("description", str(reason))
+        if reason in ("None", "none", "Priority", ""):
+            reason = reason if reason not in ("None", "none", "") else "-"
+
+        rows.append([
+            _jget(job, "job_id"),
+            _jget(job, "name"),
+            _jget(job, "user_name", default=_jget(job, "user")),
+            _jget(job, "partition"),
+            state,
+            _format_duration(elapsed),
+            nodes,
+            gpus if gpus else "-",
+            "-",  # GPU% placeholder — filled by cmd_jobs
+            _jget(job, "nodes", default=_jget(job, "node_list", default="")),
+            reason,
+        ])
+        colors.append(_state_color(state))
+    return rows, colors
+
+
+def _jobs_from_parseable(cmd):
+    fields = [
+        "JobID", "Name", "UserName", "Partition",
+        "StateCompact", "TimeUsed", "NumNodes", "tres-alloc",
+        "NodeList", "Reason",
+    ]
+    raw = _slurm_parseable(cmd, fields)
+    rows, colors = [], []
+    for r in raw:
+        state = r.get("StateCompact", "")
+        gpus = _extract_gpus_from_tres(r.get("tres-alloc", ""))
+        reason = r.get("Reason", "-")
+        if reason in ("None", "none", ""):
+            reason = "-"
+        rows.append([
+            r.get("JobID", ""),
+            r.get("Name", ""),
+            r.get("UserName", ""),
+            r.get("Partition", ""),
+            state,
+            r.get("TimeUsed", ""),
+            r.get("NumNodes", ""),
+            gpus if gpus else "-",
+            "-",  # GPU% placeholder — filled by cmd_jobs
+            r.get("NodeList", ""),
+            reason,
+        ])
+        colors.append(_state_color(state))
+    return rows, colors
+
+
+def cmd_jobs(args):
+    cmd = ["squeue"]
+    if not args.all:
+        user = args.user or _current_user()
+        cmd += ["-u", user]
+    if args.partition:
+        cmd += ["-p", args.partition]
+    if args.state:
+        cmd += ["-t", args.state]
+
+    data = _slurm_json(cmd)
+    if data and "jobs" in data:
+        rows, colors = _jobs_from_json(data)
+    else:
+        rows, colors = _jobs_from_parseable(cmd)
+
+    # Fill in GPU% for running jobs (index 8) via sacct TRESUsageInAve
+    running_ids = [str(row[0]) for row in rows
+                   if str(row[4]).rstrip("+") in ("RUNNING", "COMPLETING")]
+    if running_ids:
+        gpu_util = _batch_gpu_util(running_ids)
+        for row in rows:
+            jid = str(row[0])
+            if jid in gpu_util and gpu_util[jid]:
+                row[8] = _format_gpu_util(gpu_util[jid])
+
+    label = "All Jobs" if args.all else f"Jobs for {args.user or _current_user()}"
+    print(f"\n{C.BOLD}{label}{C.RESET}\n")
+    _print_table(_JOBS_HEADERS, rows, colors)
+
+    if rows:
+        states = {}
+        for row in rows:
+            s = row[4].split()[0].rstrip("+")
+            states[s] = states.get(s, 0) + 1
+        print(f"\n  Total: {len(rows)} jobs ({_state_summary(states)})\n")
+    else:
+        print()
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: hist  (enhanced sacct)
+# ---------------------------------------------------------------------------
+
+_HIST_HEADERS = [
+    ("JOBID",     10),
+    ("NAME",      20),
+    ("PARTITION",  10),
+    ("STATE",     12),
+    ("ELAPSED",    9),
+    ("NCPUS",      5),
+    ("NNODES",     5),
+    ("GPU%",       4),
+    ("MAXRSS",     8),
+    ("EXIT",       4),
+]
+
+
+def _hist_from_json(data):
+    rows, colors = [], []
+    for job in data.get("jobs", []):
+        state = _extract_state(job)
+        elapsed = _extract_elapsed(job)
+
+        ncpus = _jget(job, "required", "CPUs", default="")
+        if not ncpus:
+            ncpus = _jget(job, "cpus", "number", default="")
+
+        nnodes = _jget(job, "node_count", "number", default="")
+        if isinstance(nnodes, dict):
+            nnodes = nnodes.get("set", "")
+
+        # Exit code
+        exit_raw = job.get("exit_code", {})
+        if isinstance(exit_raw, dict):
+            ec = _jget(exit_raw, "status", "return_code", default="")
+            if ec == "":
+                ec = _jget(exit_raw, "return_code", default="0")
+        else:
+            ec = str(exit_raw)
+
+        # GPU utilization from TRES
+        tres_ave = _jget(job, "tres", "allocated", default="")
+        if isinstance(tres_ave, list):
+            # JSON TRES is sometimes a list of {type, name, id, count} dicts
+            gpu_util_val = ""
+            for t in tres_ave:
+                if isinstance(t, dict) and t.get("type") == "gres" and "gpuutil" in str(t.get("name", "")):
+                    gpu_util_val = str(t.get("count", ""))
+                    break
+        else:
+            gpu_util_val = _extract_tres_field(str(tres_ave), "gres/gpuutil")
+
+        rows.append([
+            _jget(job, "job_id"),
+            _jget(job, "name"),
+            _jget(job, "partition"),
+            state,
+            _format_duration(elapsed),
+            ncpus,
+            nnodes,
+            _format_gpu_util(gpu_util_val) if gpu_util_val else "-",
+            "-",  # MaxRSS not reliably in sacct --json for batch-level
+            ec,
+        ])
+        colors.append(_state_color(state))
+    return rows, colors
+
+
+def _hist_from_parseable(cmd):
+    fields = [
+        "JobID", "JobName", "Partition", "State",
+        "Elapsed", "NCPUS", "NNodes", "TRESUsageInAve%200",
+        "MaxRSS", "ExitCode",
+    ]
+    raw = _slurm_parseable(cmd, fields)
+    rows, colors = [], []
+    for r in raw:
+        state = r.get("State", "")
+        maxrss = r.get("MaxRSS", "") or "-"
+        tres_ave = r.get("TRESUsageInAve%200", "")
+        gpu_util_val = _extract_tres_field(tres_ave, "gres/gpuutil")
+        rows.append([
+            r.get("JobID", ""),
+            r.get("JobName", ""),
+            r.get("Partition", ""),
+            state,
+            r.get("Elapsed", ""),
+            r.get("NCPUS", ""),
+            r.get("NNodes", ""),
+            _format_gpu_util(gpu_util_val) if gpu_util_val else "-",
+            maxrss,
+            r.get("ExitCode", ""),
+        ])
+        colors.append(_state_color(state))
+    return rows, colors
+
+
+def cmd_hist(args):
+    user = args.user or _current_user()
+    start = (datetime.now() - timedelta(days=args.days)).strftime("%Y-%m-%dT00:00:00")
+
+    cmd = ["sacct", "-u", user, "--starttime", start, "--allocations"]
+    if args.job:
+        cmd += ["-j", args.job]
+    if args.state:
+        cmd += ["--state", args.state]
+
+    data = _slurm_json(cmd)
+    if data and "jobs" in data:
+        rows, colors = _hist_from_json(data)
+    else:
+        rows, colors = _hist_from_parseable(cmd)
+
+    day_label = "day" if args.days == 1 else "days"
+    print(f"\n{C.BOLD}Job History for {user}{C.RESET} (last {args.days} {day_label})\n")
+    _print_table(_HIST_HEADERS, rows, colors)
+
+    if rows:
+        states = {}
+        for row in rows:
+            s = row[3].split()[0].rstrip("+")
+            states[s] = states.get(s, 0) + 1
+        print(f"\n  Total: {len(rows)} jobs ({_state_summary(states)})\n")
+    else:
+        print()
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: cluster  (enhanced sinfo)
+# ---------------------------------------------------------------------------
+
+_CLUSTER_HEADERS = [
+    ("PARTITION", 14),
+    ("AVAIL",      5),
+    ("NODES",      5),
+    ("IDLE",       4),
+    ("MIXED",      5),
+    ("ALLOC",      5),
+    ("DOWN",       4),
+    ("CPUS",       6),
+    ("MEMORY",     8),
+    ("GPUS",       5),
+]
+
+
+def _cluster_from_json(data):
+    """Aggregate node-level JSON into per-partition summaries."""
+    partitions = {}
+    for node in data.get("nodes", []):
+        node_parts = node.get("partitions", [])
+        if isinstance(node_parts, str):
+            node_parts = [node_parts]
+
+        state = _extract_state(node).lower().rstrip("*+~#$")
+
+        cpus = node.get("cpus", 0)
+        if isinstance(cpus, dict):
+            cpus = cpus.get("maximum", 0)
+
+        mem = node.get("real_memory", 0)  # MB
+        gpus = _extract_gres_gpus(str(node.get("gres", "")))
+
+        for pname in node_parts:
+            if pname not in partitions:
+                partitions[pname] = dict(
+                    avail="up", total=0, idle=0, mixed=0,
+                    allocated=0, down=0, cpus=0, mem=0, gpus=0,
+                )
+            p = partitions[pname]
+            p["total"] += 1
+            p["cpus"] += int(cpus)
+            p["mem"] += int(mem)
+            p["gpus"] += gpus
+
+            if "idle" in state:
+                p["idle"] += 1
+            elif "mix" in state:
+                p["mixed"] += 1
+            elif "alloc" in state:
+                p["allocated"] += 1
+            elif any(s in state for s in ("down", "drain", "fail", "error")):
+                p["down"] += 1
+    return partitions
+
+
+def _cluster_from_parseable(cmd):
+    out = _run(cmd + ["--format=%P|%a|%D|%T|%C|%m|%G", "--noheader"])
+    partitions = {}
+    for line in out.strip().splitlines():
+        if not line:
+            continue
+        parts = [v.strip() for v in line.split("|")]
+        if len(parts) < 7:
+            continue
+
+        pname = parts[0].rstrip("*")
+        avail = parts[1]
+        try:
+            count = int(parts[2])
+        except ValueError:
+            count = 0
+        state = parts[3].lower()
+
+        # CPUs field is A/I/O/T
+        try:
+            cpu_segs = parts[4].split("/")
+            total_cpus = int(cpu_segs[-1]) if len(cpu_segs) == 4 else 0
+        except (ValueError, IndexError):
+            total_cpus = 0
+
+        try:
+            mem_per_node = int(parts[5])
+        except ValueError:
+            mem_per_node = 0
+
+        gpus = _extract_gres_gpus(parts[6]) * count
+
+        if pname not in partitions:
+            partitions[pname] = dict(
+                avail=avail, total=0, idle=0, mixed=0,
+                allocated=0, down=0, cpus=0, mem=0, gpus=0,
+            )
+        p = partitions[pname]
+        p["total"] += count
+        p["cpus"] = max(p["cpus"], total_cpus)
+        p["mem"] += mem_per_node * count
+        p["gpus"] += gpus
+
+        if "idle" in state:
+            p["idle"] += count
+        elif "mix" in state:
+            p["mixed"] += count
+        elif "alloc" in state:
+            p["allocated"] += count
+        elif any(s in state for s in ("down", "drain", "fail", "error")):
+            p["down"] += count
+    return partitions
+
+
+def _partition_color(p: dict) -> str:
+    if p["idle"] > p["total"] * 0.5:
+        return C.GREEN
+    if p["idle"] > 0 or p["mixed"] > 0:
+        return C.YELLOW
+    return C.RED
+
+
+def cmd_cluster(args):
+    cmd = ["sinfo"]
+    if args.partition:
+        cmd += ["-p", args.partition]
+
+    data = _slurm_json(cmd)
+    if data and "nodes" in data:
+        partitions = _cluster_from_json(data)
+    else:
+        partitions = _cluster_from_parseable(cmd)
+
+    if not partitions:
+        print(f"  {C.DIM}No partition information available.{C.RESET}")
+        return
+
+    rows, colors = [], []
+    for name in sorted(partitions):
+        p = partitions[name]
+        rows.append([
+            name,
+            p.get("avail", "up"),
+            p["total"],
+            p["idle"],
+            p["mixed"],
+            p["allocated"],
+            p["down"],
+            p["cpus"],
+            _format_mem(p["mem"]),
+            p["gpus"] if p["gpus"] else "-",
+        ])
+        colors.append(_partition_color(p))
+
+    print(f"\n{C.BOLD}Cluster Overview{C.RESET}\n")
+    _print_table(_CLUSTER_HEADERS, rows, colors)
+    print(f"\n  {C.DIM}Nodes in multiple partitions are counted in each.{C.RESET}\n")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: group  (jobs by Slurm account)
+# ---------------------------------------------------------------------------
+
+_GROUP_HEADERS = [
+    ("JOBID",     8),
+    ("USER",     10),
+    ("NAME",     16),
+    ("PARTITION", 10),
+    ("STATE",    10),
+    ("TIME",      9),
+    ("NODES",     5),
+    ("GPUS",      4),
+    ("NODELIST", 15),
+]
+
+_GROUP_SUMMARY_HEADERS = [
+    ("USER",     10),
+    ("RUNNING",   7),
+    ("PENDING",   7),
+    ("OTHER",     5),
+    ("TOTAL",     5),
+    ("NODES",     5),
+    ("GPUS",      5),
+]
+
+_STATE_SORT_ORDER = {
+    "RUNNING": 0, "COMPLETING": 0, "CONFIGURING": 1,
+    "PENDING": 2, "REQUEUED": 3, "SUSPENDED": 4,
+}
+
+
+def cmd_group(args):
+    if not args.account:
+        print("Error: -A/--account is required for 'slt group'.", file=sys.stderr)
+        print("  Usage: slt group -A <account_name>", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = ["squeue", "-A", args.account]
+    if args.partition:
+        cmd += ["-p", args.partition]
+    if args.state:
+        cmd += ["-t", args.state]
+
+    data = _slurm_json(cmd)
+    if data and "jobs" in data:
+        rows, colors = _jobs_from_json(data)
+    else:
+        rows, colors = _jobs_from_parseable(cmd)
+
+    # Reorder columns: move USER (index 2) before NAME (index 1), drop GPU%/REASON
+    reordered, recolors = [], []
+    for ri, row in enumerate(rows):
+        reordered.append([
+            row[0],  # JOBID
+            row[2],  # USER
+            row[1],  # NAME
+            row[3],  # PARTITION
+            row[4],  # STATE
+            row[5],  # TIME
+            row[6],  # NODES
+            row[7],  # GPUS
+            row[9],  # NODELIST (was index 8, now 9 with GPU% at 8)
+        ])
+        recolors.append(colors[ri])
+
+    # Sort: running first, then pending, then rest; within each group by user
+    def sort_key(item):
+        row = item[0]
+        state = row[4].split()[0].rstrip("+")
+        return (_STATE_SORT_ORDER.get(state, 9), row[1].lower(), row[0])
+
+    paired = sorted(zip(reordered, recolors), key=sort_key)
+    if paired:
+        reordered, recolors = zip(*paired)
+        reordered, recolors = list(reordered), list(recolors)
+
+    print(f"\n{C.BOLD}Jobs for account {args.account}{C.RESET}\n")
+
+    if not reordered:
+        print(f"  {C.DIM}No jobs found.{C.RESET}\n")
+        return
+
+    _print_table(_GROUP_HEADERS, reordered, recolors)
+
+    # Per-user summary
+    users = {}
+    for row in reordered:
+        user = row[1]
+        state = row[4].split()[0].rstrip("+")
+        nodes = row[6]
+        gpus = row[7]
+        if user not in users:
+            users[user] = {"RUNNING": 0, "PENDING": 0, "other": 0,
+                           "total": 0, "nodes": 0, "gpus": 0}
+        u = users[user]
+        u["total"] += 1
+        if state in ("RUNNING", "COMPLETING"):
+            u["RUNNING"] += 1
+        elif state == "PENDING":
+            u["PENDING"] += 1
+        else:
+            u["other"] += 1
+        try:
+            u["nodes"] += int(nodes)
+        except (ValueError, TypeError):
+            pass
+        try:
+            u["gpus"] += int(gpus)
+        except (ValueError, TypeError):
+            pass
+
+    summary_rows, summary_colors = [], []
+    for uname in sorted(users):
+        u = users[uname]
+        summary_rows.append([
+            uname,
+            u["RUNNING"] or "-",
+            u["PENDING"] or "-",
+            u["other"] or "-",
+            u["total"],
+            u["nodes"] or "-",
+            u["gpus"] or "-",
+        ])
+        if u["RUNNING"] > 0 and u["PENDING"] == 0:
+            summary_colors.append(C.GREEN)
+        elif u["RUNNING"] > 0:
+            summary_colors.append(C.YELLOW)
+        elif u["PENDING"] > 0:
+            summary_colors.append(C.YELLOW)
+        else:
+            summary_colors.append(C.WHITE)
+
+    print(f"\n{C.BOLD}Per-user summary{C.RESET}\n")
+    _print_table(_GROUP_SUMMARY_HEADERS, summary_rows, summary_colors)
+
+    total_r = sum(u["RUNNING"] for u in users.values())
+    total_p = sum(u["PENDING"] for u in users.values())
+    total_n = sum(u["nodes"] for u in users.values())
+    total_g = sum(u["gpus"] for u in users.values())
+    print(f"\n  Total: {len(reordered)} jobs"
+          f" ({_colorize(str(total_r), C.GREEN)} running,"
+          f" {_colorize(str(total_p), C.YELLOW)} pending)"
+          f"  |  {total_n} nodes, {total_g} GPUs\n")
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: fairshare  (enhanced sshare)
+# ---------------------------------------------------------------------------
+
+_FS_HEADERS = [
+    ("ACCOUNT",   14),
+    ("USER",      10),
+    ("RAWSHARES",  9),
+    ("NORMSHARES", 10),
+    ("RAWUSAGE",  12),
+    ("EFFUSAGE",  10),
+    ("FAIRSHARE",  9),
+]
+
+_FS_ACCOUNT_HEADERS = [
+    ("ACCOUNT",   14),
+    ("RAWSHARES",  9),
+    ("NORMSHARES", 10),
+    ("RAWUSAGE",  12),
+    ("EFFUSAGE",  10),
+    ("FAIRSHARE",  9),
+]
+
+
+def _parse_sshare(cmd):
+    """Run sshare and parse the output into rows.
+
+    Tries --parseable first (|‑delimited), falls back to parsing the
+    default fixed-width columnar output.
+    """
+    # Try --parseable (outputs |‑delimited lines with trailing |)
+    out = _run(cmd + ["--parseable", "--noheader"], check=False)
+    if out and "|" in out:
+        rows = []
+        for line in out.strip().splitlines():
+            if not line.strip():
+                continue
+            parts = [v.strip() for v in line.rstrip("|").split("|")]
+            if len(parts) < 7:
+                continue
+            rows.append({
+                "account":     parts[0],
+                "user":        parts[1],
+                "raw_shares":  parts[2],
+                "norm_shares": parts[3],
+                "raw_usage":   parts[4],
+                "eff_usage":   parts[5],
+                "fairshare":   parts[6],
+            })
+        if rows:
+            return rows
+
+    # Fallback: parse default whitespace-padded output
+    out = _run(cmd + ["--noheader"], check=False)
+    if not out:
+        return []
+    rows = []
+    for line in out.strip().splitlines():
+        if not line.strip() or line.lstrip().startswith("---"):
+            continue
+        parts = line.split()
+        if len(parts) == 5:
+            # Account-level row: account, raw_shares, norm_shares, raw_usage, eff_usage
+            rows.append({
+                "account":     parts[0],
+                "user":        "",
+                "raw_shares":  parts[1],
+                "norm_shares": parts[2],
+                "raw_usage":   parts[3],
+                "eff_usage":   parts[4],
+                "fairshare":   "",
+            })
+        elif len(parts) == 6:
+            # Account row that includes fairshare
+            rows.append({
+                "account":     parts[0],
+                "user":        "",
+                "raw_shares":  parts[1],
+                "norm_shares": parts[2],
+                "raw_usage":   parts[3],
+                "eff_usage":   parts[4],
+                "fairshare":   parts[5],
+            })
+        elif len(parts) >= 7:
+            # User-level row: account, user, raw_shares, norm_shares,
+            #                  raw_usage, eff_usage, fairshare
+            rows.append({
+                "account":     parts[0],
+                "user":        parts[1],
+                "raw_shares":  parts[2],
+                "norm_shares": parts[3],
+                "raw_usage":   parts[4],
+                "eff_usage":   parts[5],
+                "fairshare":   parts[6],
+            })
+    return rows
+
+
+def _fairshare_bar(value_str: str) -> str:
+    """Render a small inline bar for a fairshare factor (0.0 – 1.0)."""
+    try:
+        val = float(value_str)
+    except (ValueError, TypeError):
+        return value_str
+    bar_w = 10
+    filled = int(val * bar_w)
+    if val >= 0.5:
+        color = C.GREEN
+    elif val >= 0.2:
+        color = C.YELLOW
+    else:
+        color = C.RED
+    bar = f"{color}{'█' * filled}{C.DIM}{'░' * (bar_w - filled)}{C.RESET}"
+    return f"[{bar}] {_colorize(f'{val:.4f}', color)}"
+
+
+def _format_raw_usage(val_str: str) -> str:
+    """Format raw usage (cpu-seconds) into human-readable."""
+    try:
+        val = int(val_str)
+    except (ValueError, TypeError):
+        return val_str
+    if val < 3600:
+        return f"{val}s"
+    if val < 86400:
+        return f"{val / 3600:.1f}h"
+    if val < 86400 * 365:
+        return f"{val / 86400:.1f}d"
+    return f"{val / (86400 * 365):.1f}y"
+
+
+def cmd_fairshare(args):
+    if args.all:
+        # All accounts
+        cmd = ["sshare", "--all"]
+        title = "Cluster-wide Fairshare"
+    elif args.account:
+        cmd = ["sshare", "-A", args.account]
+        title = f"Fairshare for account {args.account}"
+    else:
+        user = args.user or _current_user()
+        cmd = ["sshare", "-u", user]
+        title = f"Fairshare for {user}"
+
+    if args.long:
+        cmd.append("--long")
+
+    data = _parse_sshare(cmd)
+    if not data:
+        print(f"\n{C.BOLD}{title}{C.RESET}\n")
+        print(f"  {C.DIM}No fairshare data available (is sshare installed?){C.RESET}\n")
+        return
+
+    # Separate account-level rows (no user) from user-level rows
+    acct_rows = [r for r in data if not r["user"] or r["user"] == ""]
+    user_rows = [r for r in data if r["user"] and r["user"] != ""]
+
+    print(f"\n{C.BOLD}{title}{C.RESET}\n")
+
+    if acct_rows and not args.all:
+        # Show account-level summary first
+        print(f"  {C.BOLD}Account-level:{C.RESET}")
+        for r in acct_rows:
+            fs = _fairshare_bar(r["fairshare"])
+            usage = _format_raw_usage(r["raw_usage"])
+            print(f"    {r['account']}: {fs}  (usage: {usage},"
+                  f" norm_shares: {r['norm_shares']})")
+        print()
+
+    # User-level table
+    if user_rows:
+        # Sort by fairshare descending (highest fairshare = best position)
+        def fs_sort(r):
+            try:
+                return -float(r["fairshare"])
+            except (ValueError, TypeError):
+                return 0
+        user_rows.sort(key=fs_sort)
+
+        table_rows, table_colors = [], []
+        for r in user_rows:
+            try:
+                fs_val = float(r["fairshare"])
+            except (ValueError, TypeError):
+                fs_val = 0.5
+
+            if fs_val >= 0.5:
+                color = C.GREEN
+            elif fs_val >= 0.2:
+                color = C.YELLOW
+            else:
+                color = C.RED
+
+            table_rows.append([
+                r["account"],
+                r["user"],
+                r["raw_shares"],
+                r["norm_shares"],
+                _format_raw_usage(r["raw_usage"]),
+                r["eff_usage"],
+                r["fairshare"],
+            ])
+            table_colors.append(color)
+
+        _print_table(_FS_HEADERS, table_rows, table_colors)
+        print()
+
+        # Highlight current user if present
+        me = _current_user()
+        for r in user_rows:
+            if r["user"] == me:
+                print(f"  {C.BOLD}You:{C.RESET} {_fairshare_bar(r['fairshare'])}")
+                print()
+                break
+    elif acct_rows and args.all:
+        # All-accounts mode: show account-level table
+        acct_rows.sort(key=lambda r: (
+            -float(r["fairshare"]) if r["fairshare"] else 0
+        ))
+        table_rows, table_colors = [], []
+        for r in acct_rows:
+            try:
+                fs_val = float(r["fairshare"])
+            except (ValueError, TypeError):
+                fs_val = 0.5
+
+            if fs_val >= 0.5:
+                color = C.GREEN
+            elif fs_val >= 0.2:
+                color = C.YELLOW
+            else:
+                color = C.RED
+
+            table_rows.append([
+                r["account"],
+                r["raw_shares"],
+                r["norm_shares"],
+                _format_raw_usage(r["raw_usage"]),
+                r["eff_usage"],
+                r["fairshare"],
+            ])
+            table_colors.append(color)
+
+        _print_table(_FS_ACCOUNT_HEADERS, table_rows, table_colors)
+        print()
+
+
+# ---------------------------------------------------------------------------
+# Default: dashboard summary
+# ---------------------------------------------------------------------------
+
+_SUMMARY_PENDING_HEADERS = [
+    ("JOBID",     8),
+    ("NAME",     20),
+    ("PARTITION", 10),
+    ("NODES",     5),
+    ("GPUS",      4),
+    ("TIME",      9),
+    ("REASON",   18),
+]
+
+
+def cmd_summary(_args):
+    user = _current_user()
+
+    print(f"\n{C.BOLD}Slurm Dashboard for {user}{C.RESET}")
+    print(_colorize("─" * min(60, _term_width()), C.DIM))
+
+    # --- fetch all user jobs ---
+    data = _slurm_json(["squeue", "-u", user])
+    all_rows = []
+    if data and "jobs" in data:
+        for job in data.get("jobs", []):
+            state = _extract_state(job)
+            elapsed = _extract_elapsed(job)
+            nodes = _jget(job, "node_count", "number", default="")
+            if isinstance(nodes, dict):
+                nodes = nodes.get("set", "")
+            gpus = 0
+            tres_alloc = _jget(job, "tres_req_str", default="")
+            if tres_alloc:
+                gpus = _extract_gpus_from_tres(str(tres_alloc))
+            reason = _jget(job, "state_reason", default="")
+            if isinstance(reason, dict):
+                reason = reason.get("description", str(reason))
+            if reason in ("None", "none", ""):
+                reason = "-"
+            all_rows.append({
+                "jobid": str(_jget(job, "job_id")),
+                "name": _jget(job, "name"),
+                "partition": _jget(job, "partition"),
+                "state": state,
+                "elapsed": _format_duration(elapsed),
+                "nodes": str(nodes),
+                "gpus": gpus,
+                "reason": reason,
+            })
+    else:
+        fields = [
+            "JobID", "Name", "Partition", "StateCompact",
+            "TimeUsed", "NumNodes", "tres-alloc", "Reason",
+        ]
+        raw = _slurm_parseable(["squeue", "-u", user], fields)
+        for r in raw:
+            gpus = _extract_gpus_from_tres(r.get("tres-alloc", ""))
+            reason = r.get("Reason", "-")
+            if reason in ("None", "none", ""):
+                reason = "-"
+            all_rows.append({
+                "jobid": r.get("JobID", ""),
+                "name": r.get("Name", ""),
+                "partition": r.get("Partition", ""),
+                "state": r.get("StateCompact", ""),
+                "elapsed": r.get("TimeUsed", ""),
+                "nodes": r.get("NumNodes", ""),
+                "gpus": gpus,
+                "reason": reason,
+            })
+
+    # Categorize jobs
+    running = [r for r in all_rows
+               if r["state"].rstrip("+") in ("RUNNING", "COMPLETING", "CONFIGURING")]
+    pending = [r for r in all_rows if r["state"].rstrip("+") == "PENDING"]
+    other = [r for r in all_rows if r not in running and r not in pending]
+
+    # --- Running summary with GPU utilization ---
+    if running:
+        total_nodes = sum(int(r["nodes"]) for r in running if r["nodes"].isdigit())
+        total_gpus = sum(r["gpus"] for r in running)
+        gpu_str = f", {total_gpus} GPUs" if total_gpus else ""
+        print(f"\n  {_colorize('▶ Running', C.GREEN)}: {C.BOLD}{len(running)}{C.RESET}"
+              f" jobs ({total_nodes} nodes{gpu_str})")
+
+        # Query GPU utilization for running jobs
+        if total_gpus:
+            running_ids = [r["jobid"] for r in running]
+            gpu_util = _batch_gpu_util(running_ids)
+            utils = []
+            for r in running:
+                val = gpu_util.get(r["jobid"], "")
+                if val:
+                    try:
+                        utils.append(float(val))
+                    except (ValueError, TypeError):
+                        pass
+            if utils:
+                avg_util = sum(utils) / len(utils)
+                color = C.GREEN if avg_util >= 70 else (C.YELLOW if avg_util >= 30 else C.RED)
+                bar_w = 15
+                filled = int(avg_util / 100 * bar_w)
+                bar = f"{color}{'█' * filled}{C.DIM}{'░' * (bar_w - filled)}{C.RESET}"
+                print(f"  {C.BOLD}GPU util:{C.RESET}  [{bar}] {_colorize(f'{avg_util:.0f}%', color)}"
+                      f" avg across {len(utils)} jobs")
+    else:
+        print(f"\n  {_colorize('▶ Running', C.DIM)}: none")
+
+    # --- Pending jobs (table) ---
+    if pending:
+        print(f"\n  {_colorize('⏳ Pending', C.YELLOW)}: {C.BOLD}{len(pending)}{C.RESET} jobs\n")
+        table_rows = []
+        for r in pending:
+            table_rows.append([
+                r["jobid"],
+                r["name"],
+                r["partition"],
+                r["nodes"],
+                r["gpus"] if r["gpus"] else "-",
+                r["elapsed"],
+                r["reason"],
+            ])
+        _print_table(_SUMMARY_PENDING_HEADERS, table_rows)
+    else:
+        print(f"\n  {_colorize('⏳ Pending', C.DIM)}: none")
+
+    # --- Other states ---
+    if other:
+        other_states = {}
+        for r in other:
+            s = r["state"].split()[0].rstrip("+")
+            other_states[s] = other_states.get(s, 0) + 1
+        print(f"\n  Other: {_state_summary(other_states)}")
+
+    # --- Fairshare (one line) ---
+    fs_data = _parse_sshare(["sshare", "-u", user])
+    user_fs = [r for r in fs_data if r["user"] == user]
+    if user_fs:
+        r = user_fs[0]
+        print(f"\n  {C.BOLD}Fairshare:{C.RESET} {_fairshare_bar(r['fairshare'])}"
+              f"  {C.DIM}(usage: {_format_raw_usage(r['raw_usage'])},"
+              f" account: {r['account']}){C.RESET}")
+    elif fs_data:
+        # Might only have account-level row
+        r = fs_data[0]
+        if r["fairshare"]:
+            print(f"\n  {C.BOLD}Fairshare:{C.RESET} {_fairshare_bar(r['fairshare'])}"
+                  f"  {C.DIM}(account: {r['account']}){C.RESET}")
+
+    # --- Cluster CPU utilization ---
+    out = _run(["sinfo", "--format=%C", "--noheader"], check=False, timeout=10)
+    if out:
+        for line in out.strip().splitlines():
+            line = line.strip()
+            if "/" not in line:
+                continue
+            try:
+                a, i, o, t = (int(x) for x in line.split("/"))
+            except ValueError:
+                continue
+            if t == 0:
+                break
+            pct = a / t * 100
+            color = C.RED if pct > 90 else (C.YELLOW if pct > 70 else C.GREEN)
+            bar_w = 20
+            filled = int(pct / 100 * bar_w)
+            bar = f"{color}{'█' * filled}{C.DIM}{'░' * (bar_w - filled)}{C.RESET}"
+            print(f"  {C.BOLD}Cluster:{C.RESET}   [{bar}] {_colorize(f'{pct:.0f}%', color)}"
+                  f" CPUs ({a}/{t})")
+            break
+
+    print(f"\n{C.DIM}  slt jobs | slt group -A ... | slt hist | slt cluster | slt fairshare{C.RESET}\n")
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="slt",
+        description="Slurm Tools — better query tools for Slurm clusters",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "subcommands:\n"
+            "  jobs       current jobs    (enhanced squeue)\n"
+            "  group      jobs by account (squeue -A)\n"
+            "  hist       job history     (enhanced sacct)\n"
+            "  cluster    cluster info    (enhanced sinfo)\n"
+            "  fairshare  fairshare info  (enhanced sshare)\n"
+            "\n"
+            "With no subcommand, shows a quick summary."
+        ),
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # -- jobs --
+    p_jobs = sub.add_parser("jobs", help="current jobs (enhanced squeue)")
+    p_jobs.add_argument("-a", "--all", action="store_true", help="show all users' jobs")
+    p_jobs.add_argument("-u", "--user", help="filter by user")
+    p_jobs.add_argument("-p", "--partition", help="filter by partition")
+    p_jobs.add_argument("-t", "--state", help="filter by state (e.g. RUNNING,PENDING)")
+
+    # -- group --
+    p_group = sub.add_parser("group", help="jobs by Slurm account")
+    p_group.add_argument("-A", "--account", required=True,
+                         help="Slurm account name (required)")
+    p_group.add_argument("-p", "--partition", help="filter by partition")
+    p_group.add_argument("-t", "--state", help="filter by state (e.g. RUNNING,PENDING)")
+
+    # -- hist --
+    p_hist = sub.add_parser("hist", help="job history (enhanced sacct)")
+    p_hist.add_argument("-d", "--days", type=int, default=7,
+                        help="look-back window in days (default: 7)")
+    p_hist.add_argument("-u", "--user", help="filter by user")
+    p_hist.add_argument("-j", "--job", help="show a specific job ID")
+    p_hist.add_argument("-t", "--state", help="filter by state (e.g. COMPLETED,FAILED)")
+
+    # -- cluster --
+    p_cluster = sub.add_parser("cluster", help="cluster overview (enhanced sinfo)")
+    p_cluster.add_argument("-p", "--partition", help="filter by partition")
+
+    # -- fairshare --
+    p_fs = sub.add_parser("fairshare", help="fairshare info (enhanced sshare)")
+    p_fs.add_argument("-u", "--user", help="show fairshare for specific user")
+    p_fs.add_argument("-A", "--account",
+                      help="show fairshare for all users in an account")
+    p_fs.add_argument("-a", "--all", action="store_true",
+                      help="show fairshare for all accounts on the cluster")
+    p_fs.add_argument("-l", "--long", action="store_true",
+                      help="pass --long to sshare for extra detail")
+
+    args = parser.parse_args()
+
+    dispatch = {
+        "jobs":      cmd_jobs,
+        "group":     cmd_group,
+        "hist":      cmd_hist,
+        "cluster":   cmd_cluster,
+        "fairshare": cmd_fairshare,
+    }
+    dispatch.get(args.command, cmd_summary)(args)
+
+
+if __name__ == "__main__":
+    main()
