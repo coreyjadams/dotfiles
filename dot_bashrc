@@ -16,6 +16,11 @@ export AQUA_GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/aquaproj-aqua/aqua.
 # Use eza as ls when available (installed via aqua)
 command -v eza &>/dev/null && alias ls='eza'
 
+# Source user-local bash completions (not all systems auto-scan this directory)
+for f in "$HOME/.local/share/bash-completion/completions/"*; do
+    [ -f "$f" ] && . "$f"
+done
+
 export TERM=xterm-256color
 export EDITOR=micro
 
