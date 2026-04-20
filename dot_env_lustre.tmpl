@@ -2,4 +2,6 @@
 # Lustre paths for this cluster (set by chezmoi from promptStringOnce)
 export USER_LUSTRE="{{ .user_lustre }}"
 export GROUP_LUSTRE="{{ .group_lustre }}"
+export UV_CACHE_DIR="{{ .user_lustre }}/.cache/uv"
+export PIP_CACHE_DIR="{{ .user_lustre }}/.cache/pip"
 {{- end }}
