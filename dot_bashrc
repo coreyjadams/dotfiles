@@ -1,6 +1,14 @@
 # Source system-wide bashrc if present (important for clusters/remote servers)
 [ -f /etc/bashrc ] && source /etc/bashrc
 
+# -- History settings --
+shopt -s histappend              # append to history file, don't overwrite
+HISTSIZE=10000                   # commands kept in memory
+HISTFILESIZE=20000               # lines kept in ~/.bash_history
+HISTCONTROL=ignoreboth:erasedups # skip duplicates and space-prefixed commands
+HISTIGNORE="ls:cd:pwd:exit:clear:history"  # skip trivial commands
+PROMPT_COMMAND="history -a; ${PROMPT_COMMAND:-}"  # flush history after every command
+
 # ble.sh: Bash Line Editor (syntax highlighting, autosuggestions, etc.)
 [[ $- == *i* ]] && [ -f "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" ] && source "${XDG_DATA_HOME:-$HOME/.local/share}/blesh/ble.sh" --noattach
 
