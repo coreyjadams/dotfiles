@@ -68,6 +68,10 @@ Use `.chezmoiexternal.toml` to download and extract it. Example (ble.sh):
     stripComponents = 1
 ```
 
+### Rust toolchain
+
+Rust (rustc, cargo, clippy, rustfmt) is installed via [rustup](https://rustup.rs/), not aqua. The `run_once_before_install-rustup.sh` script handles initial installation with `--no-modify-path` (PATH is managed in bashrc/zshrc). To add Rust components, use `rustup component add <name>`.
+
 ### If the tool needs a custom install script
 
 1. Create a new script in `.chezmoiscripts/`:
