@@ -1,0 +1,78 @@
+# Overview {.unnumbered}
+
+<!--
+WRITE THIS PARAGRAPH FIRST — on day one, before any experiment. It is the
+"abstract you wish you could publish." State the question, why it matters, and
+the one-sentence claim you hope to make. You will revise it every loop; that
+revision is how you steer the research. Follow Drela's summary template:
+purpose → mechanism → key novel property → what this book contains.
+-->
+
+**The claim, in one sentence.** _State here the single takeaway a reader should
+leave with._ This book builds that claim from first principles and tests it
+against evidence, so that by the end you don't just believe it — you see *why*
+it has to be true, and exactly where it stops being true.
+
+_One paragraph of motivation:_ what real problem does this solve, and why should
+the reader care? Frame it as requirement → consequence (Drela): "doing X well
+requires Y; Y enables Z; therefore this work matters because…". Lead with a
+concrete magnitude if you have one.
+
+## The headline
+
+Lead with the money result — the single figure or number the whole book earns —
+and immediately guard it against the obvious misreading:
+
+::: {.callout-note title="How to read this figure"}
+State plainly what this result does **not** say (e.g. "this is not a like-for-like
+architecture ranking, and it does not claim attention is worse in general"), and
+what was held constant to make the comparison fair. Pre-empting the misread is
+part of showing the data honestly.
+:::
+
+If the project is falsification-driven, a compact ledger of what survived and what
+didn't orients the reader fast:
+
+| Hypothesis | Verdict | Where |
+|---|---|---|
+| _the central claim_ | Confirmed | @sec-chapter |
+| _a tempting alternative_ | **Refuted** | @sec-nb-iter11 |
+
+## The whole idea in one picture
+
+Give the reader the mental model *before* the details, so every later piece has
+somewhere to attach. A flowchart, a schematic, or a single hero figure.
+
+```{mermaid}
+flowchart LR
+    A[Problem / input] --> B[Mechanism]
+    B --> C[Prediction]
+    C --> D[Test against evidence]
+    D -->|refines| B
+```
+
+## What's different here
+
+A comparison table orients the reader fast — what does this approach do that the
+obvious baseline doesn't? (Direct, honest, one axis per row.)
+
+| Aspect | Baseline | This work |
+|---|---|---|
+| _dimension 1_ | … | … |
+| _dimension 2_ | … | … |
+| _dimension 3_ | … | … |
+
+## Reading order
+
+Hand the reader the path explicitly — a research book is a guided journey, not a
+data dump. Sequence: motivation → build the mechanism from first principles →
+evidence → honesty (what's *not* solved) → context.
+
+1. **[Chapter title](chapter.qmd)** — what it establishes and what it hands the next chapter.
+2. _…_
+
+## Scope — what this book does and does not do
+
+State the boundaries up front (Drela): the specific regime this addresses, and
+what is deliberately out of scope (and where that omitted piece is handled
+instead). Candor here builds trust for everything after.

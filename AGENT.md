@@ -106,6 +106,45 @@ Use chezmoi naming conventions:
 - `dot_config/bar/baz.toml` deploys to `~/.config/bar/baz.toml`
 - Add `.tmpl` suffix for files that need Go template processing (platform-specific content)
 
+## Adding a Claude skill
+
+Personal Claude Code skills live at `~/.claude/skills/<name>/SKILL.md` and load
+in every session on that machine. chezmoi manages them via `dot_claude/skills/`.
+
+1. Create `dot_claude/skills/<name>/SKILL.md` with YAML frontmatter:
+   ```markdown
+   ---
+   name: <name>
+   description: <specific triggers; this is what Claude uses to decide when to load the skill>
+   ---
+
+   # <Skill title>
+   ...
+   ```
+2. Put any helper scripts under `dot_claude/skills/<name>/scripts/`. Prefix
+   executable scripts with `executable_` in the source (e.g. `executable_check.sh`
+   deploys as `check.sh` with the executable bit set).
+3. Run `chezmoi apply`. The skill appears at `~/.claude/skills/<name>/`.
+
+Constraints and gotchas:
+- **Never use the `exact_` prefix** on `dot_claude` or `dot_claude/skills`.
+  `~/.claude/skills/` also holds skills deployed by other tooling (e.g.
+  `nvinfo-cli`, `managing-omnistation`); `exact_` would delete anything not in
+  the chezmoi source. Managing only specific skill subdirectories leaves those
+  (and all Claude runtime state under `~/.claude/`) untouched.
+- **Keep secrets out.** Skills are version-controlled and synced everywhere. For
+  per-cluster values, add a `.tmpl` suffix and pull from chezmoi data (see
+  `dot_env_lustre.tmpl`), never hardcode credentials.
+- Plain (non-`.tmpl`) `SKILL.md` files are safe even if they contain `{{ }}`;
+  chezmoi only runs the template engine on files ending in `.tmpl`.
+- Pick distinctive skill names so personal skills don't collide with skills
+  deployed at the system/enterprise level.
+
+The Claude Code binary itself is installed by
+`.chezmoiscripts/run_once_after_03-install-claude.sh` (native installer,
+user-space, no sudo). Native installs auto-update in the background, so the
+script only matters on fresh machines.
+
 ## Testing changes
 
 ```bash

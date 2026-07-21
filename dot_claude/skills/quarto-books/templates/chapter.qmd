@@ -1,0 +1,137 @@
+# Chapter title: state the finding, not the topic {#sec-chapter}
+
+<!--
+A chapter models the craft (see SKILL.md, "Communication craft"):
+  - open with the MESSAGE and why it matters (don't warm up)
+  - CONCRETE example / FIGURE before any general definition or equation
+  - words → picture → symbols; equations are the last resort, always sandwiched
+  - every figure sits next to its text, is direct-labelled, carries units/source
+  - never hand-type a number: compute it live with `#| output: asis`
+  - state assumptions and scope; cross-reference with {#sec-...} and @sec-...
+Rename this file 01-*.qmd, 02-*.qmd, … and give the heading a real {#sec-label}.
+-->
+
+**Lead with the conclusion.** The first sentence says what this chapter
+establishes and why it matters — the reader should know the payoff before any
+build-up. Then, in physical/mechanistic language anyone could visualize, set up
+the phenomenon this chapter is about. Only once the picture is clear do symbols
+appear.
+
+**Goals & scope.** State what this chapter produces (and hands to @sec-chapter
+elsewhere), and name what it deliberately leaves out.
+
+## The hypothesis under test
+
+<!--
+When a chapter exists to test a design choice, state it as a falsifiable claim
+up front (falsification is the unit of progress). Chain these across chapters
+into a ladder that closes on an honest decomposition. Report refutations —
+INCLUDING your own predictions — as headline results, and deep-link each verdict
+to its dated origin in the lab notebook (@sec-nb-iterN).
+-->
+
+> **Hypothesis (H_n).** _The design choice, stated as a claim that could be wrong
+> (e.g. "the PDE-conforming kernel basis is what carries out-of-distribution
+> generalization")._
+> **Pre-registered prediction.** _If H_n holds, experiment E shows `<specific
+> outcome>`; if it fails, `<specific outcome>`._ (Written **before** running E.)
+> **Deciding experiment.** _E, on `<representative inputs>`._
+> **Verdict.** _Confirmed / Refuted — `<the number that settled it>`, and what it
+> means. Origin: see @sec-nb-iterN._
+
+Close the ladder with an honest decomposition when you can: "the result =
+A + B + C; each necessary, none sufficient."
+
+## Show it before you formalize it
+
+Describe what the reader is about to see and *what to notice* in it — then the
+figure. The caption is long and interpretive: it tells the reader what the
+picture means, not just what is plotted.
+
+```{python}
+#| echo: false
+#| fig-cap: "Interpretive caption: say what the reader should SEE and why it matters — e.g. 'the proposed method (blue) tracks the reference while the baseline (gray) diverges past the marked onset, showing that <mechanism> is what carries the accuracy.' State units, and name the exact data artifact the numbers come from (e.g. results/run-2026-07-04.json)."
+import _common
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Illustrative synthetic data so this template renders out of the box.
+# Replace with your real result (e.g. from _common.demo_case()).
+x = np.linspace(0, 10, 200)
+reference = np.sin(x)
+ours = reference + 0.02 * np.cos(5 * x)
+baseline = reference + 0.15 * x / 10  # drifts off
+
+# One panel here. For multiple panels, stack them VERTICALLY —
+# plt.subplots(n, 1, sharex=True) — a book page has more vertical room than
+# horizontal, and never fake a second scale with a dual y-axis.
+fig, ax = plt.subplots(figsize=(8, 4.0))
+ax.plot(x, reference, color=_common.GRID, linewidth=3, label="reference", zorder=1)
+ax.plot(x, baseline, color=_common.TEXT_SECONDARY, linewidth=1.5, label="baseline")
+ax.plot(x, ours, color=_common.SERIES[0], label="this work")
+# Direct-label instead of a legend (Tufte): the eye never trips to a key.
+_common.label_line(ax, x[-1], ours[-1], "this work", _common.SERIES[0], dx=0.1)
+_common.label_line(ax, x[-1], baseline[-1], "baseline", _common.TEXT_SECONDARY, dx=0.1)
+_common.annotate_event(ax, 6.0, "onset")
+ax.set_title("What the reader should conclude from this panel")
+# Label every axis: the quantity named, the unit in [brackets].
+ax.set_xlabel("Distance from origin [m]")
+ax.set_ylabel("Field value [V]")
+fig.tight_layout()
+```
+
+Now say, in words, the physical reading of the figure: *why* the curves behave
+as they do. This is where the intuition lives — the payoff sentence should be
+plain-language insight, not algebra.
+
+## Put numbers in the text without hand-typing them
+
+Compute every quantity that appears in prose so it can never drift from the
+data. `#| output: asis` prints Markdown that Quarto renders in place:
+
+```{python}
+#| echo: false
+#| output: asis
+max_baseline_err = float(np.max(np.abs(baseline - reference)))
+max_ours_err = float(np.max(np.abs(ours - reference)))
+factor = max_baseline_err / max_ours_err
+print(
+    f"Across the tested range, peak error is "
+    f"**{max_ours_err:.3f}** for this work versus **{max_baseline_err:.3f}** "
+    f"for the baseline — a **{factor:.0f}×** reduction *at matched conditions*."
+)
+```
+
+Note the register: a concrete magnitude, and the controlled variable stated
+explicitly ("at matched conditions") — the comparison is fair by construction.
+
+## When the math *is* the point
+
+Reach for an equation only where it carries the argument, and sandwich it: first
+name every symbol (tie them to code identifiers), then the formula, then its
+physical reading.
+
+| Symbol | Meaning | In code |
+|---|---|---|
+| $u$ | the quantity being modeled | `state.u` |
+| $\kappa$ | the parameter that sets the rate | `params.kappa` |
+
+$$
+\frac{\partial u}{\partial t} = \kappa\,\nabla^2 u
+$$
+
+Read it physically: _this says the quantity diffuses — sharp features smooth out
+at a rate set by $\kappa$ — which is why we observe <the thing in the figure>._
+Every symbol was named above; nothing is left to speak for itself.
+
+::: {.callout-note title="Why this choice and not the obvious alternative?"}
+Use a callout sparingly for an honest aside — e.g. "we use X rather than the
+more common Y because Y was *measured* to <fail in this specific way> on
+representative inputs." Candor about the design space builds trust.
+:::
+
+## What this chapter hands the next
+
+One or two sentences: what is now established, and which later chapter builds on
+it (cross-reference it, e.g. "…which @sec-chapter uses to…"). Keep the
+dependency chain visible.

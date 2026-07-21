@@ -1,0 +1,47 @@
+# Quarto book config for an autoresearch project.
+# Rename the title/subtitle/author, and edit the chapter list as the book grows.
+# Rendered with `quarto render` (or `quarto preview` while writing). HTML only by
+# default; add a `pdf:` format block under `format:` if you need a paper artifact.
+
+project:
+  type: book
+
+book:
+  title: "PROJECT TITLE: the one-line claim"
+  subtitle: "A first-principles walkthrough of <what> in <how>"
+  author: "Your name"
+  date: today
+  chapters:
+    - index.qmd            # hook + thesis paragraph + "in one picture" + reading order
+    - chapter.qmd          # rename to 01-*.qmd, 02-*.qmd, … as real chapters land
+    # - 02-mechanism.qmd
+    # - 03-benchmarks.qmd  # evidence, with a fair-comparison discipline (see SKILL.md)
+    # - 04-honesty.qmd     # what this does NOT solve
+    # - 05-future.qmd      # open directions: established/incomplete ledger + agenda
+    #                      #   (pre-registered acceptance criteria) + engineering review
+  appendices:
+    - 99-lab-notebook.qmd  # the raw, dated record. Keep it first-class; clean chapters
+                           # deep-link into its dated entries (@sec-nb-iterN). Prefer it
+                           # in the main flow? Move it into `chapters:` above as a
+                           # numbered final chapter instead of an appendix.
+
+execute:
+  freeze: auto      # re-execute a cell only when its .qmd changes; commit _freeze/.
+                    #   `freeze: false` is equally fine — plotting cells read small
+                    #   precomputed data files and stay cheap (see SKILL.md).
+  warning: false    # suppress warnings in rendered output (keep them while developing)
+
+format:
+  html:
+    theme: cosmo          # stock Bootswatch theme; no custom SCSS needed
+    toc: true
+    number-sections: true
+    code-fold: true       # figures/prose lead; code is one click away
+    code-summary: "Show code"
+    fig-width: 8
+    fig-height: 4.5
+    fig-dpi: 150
+
+# Citations: prose citations ("Drela & Giles 1987") are fine and need no setup.
+# To use @citekey references instead, uncomment and point at a .bib file:
+# bibliography: references.bib

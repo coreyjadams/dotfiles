@@ -1,0 +1,58 @@
+# Lab notebook {.unnumbered}
+
+> This is the raw, dated record of what was actually tried — hypotheses, experiments, results, dead-ends, and refutations. Written forward-chronologically, like a real lab notebook: append each new entry at the bottom. Keep what *didn't* work: a recorded refutation is a result, and deleting it invites repeating the mistake.
+
+<!--
+Texture guidance:
+  - Forward-chronological, like a real notebook: append each new entry at the BOTTOM.
+  - Each entry header carries the date and a one-line outcome, e.g.
+    "## YYYY-MM-DD — revised initialization raises the success rate".
+    Keep the title SHORT — a headline (~15 words, under ~130 chars), NEVER an
+    abstract. Details, numbers, tables, and figures go in the body BELOW the
+    header. Do not copy a previous entry's overlong title style forward.
+  - WRITE FOR THE UNINITIATED EXPERT (the binding style rule; see the skill's
+    "Write for the uninitiated expert" section): a domain expert who has never
+    seen this project must be able to read the entry cold. Each substantial
+    entry follows the narrative arc in prose paragraphs:
+      (1) the setting — 2-3 sentences of orientation, written fresh each time;
+      (2) the symptom or question that motivated the work, in physical terms;
+      (3) what was tested — hypotheses with pre-registered predictions;
+      (4) the instruments — what was actually run, reproducibly described;
+      (5) what we saw — measurements in complete sentences, numbers in
+          readable positions, bold reserved for the few load-bearing claims;
+      (6) why it matters — mechanism/interpretation in plain language;
+      (7) what's next, with its acceptance criterion.
+    Define every term/acronym at first use IN EACH ENTRY (after that,
+    shorthand is fine within the entry); expand project code-names into what
+    they physically represent at least once. Telegraphic clause-chains of
+    project shorthand are write-only — do not produce them.
+  - Raw ≠ unreadable: "raw" means dated, complete, and honest about dead ends —
+    never degraded prose.
+  - Say "Supersedes …" / "Refutes …" when an entry overturns a prior one, and
+    mark superseded interpretations as superseded wherever they are mentioned.
+  - Give each entry a stable anchor ({#sec-nb-iterN}) and name the artifact holding
+    its numbers, so polished chapters can deep-link a claim to its dated origin via
+    @sec-nb-iterN. Pre-register predictions BEFORE the run; keep refuted configs runnable.
+  - ASCII math is fine here. Link dated artifacts rather than transcribing their
+    values. Note tooling gotchas that will save future work. Attribute observations.
+-->
+
+<!-- Replace this commented skeleton for each entry, then append the next entry below it.
+
+## YYYY-MM-DD — concise outcome {#sec-nb-short-slug}
+
+**Setting:** Orient an expert who has never seen the project.
+
+**Question:** State the symptom or uncertainty in physical terms.
+
+**Hypotheses:** List competing explanations and each one's discriminating prediction.
+
+**Experiment:** Describe what was run and link the dated input/output artifact.
+
+**Result:** Report the measurements in complete sentences.
+
+**Interpretation:** Explain the mechanism, including whether a prior belief was
+supported, superseded, or refuted.
+
+**Next:** Name the follow-on and its acceptance criterion.
+-->

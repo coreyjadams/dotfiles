@@ -1,0 +1,6 @@
+# Quarto build output and local environment.
+# Keep _freeze/ COMMITTED so cells don't re-execute on a clean checkout.
+_book/
+.quarto/
+.venv/
+__pycache__/

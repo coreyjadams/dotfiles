@@ -26,7 +26,8 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf)
+7. Installs standalone tools not in aqua's registry (hf, Claude Code)
+8. Deploys personal Claude Code skills to `~/.claude/skills/`
 
 ## How it works
 
@@ -75,6 +76,18 @@ fi
 echo "==> Installing mytool..."
 curl -sSfL https://example.com/install.sh | bash
 ```
+
+### Portable Claude Code skills
+
+Personal Claude Code skills are managed under `dot_claude/skills/` and deploy to
+`~/.claude/skills/<name>/`, so they're version-controlled and portable across
+clusters. Each skill is a directory with a `SKILL.md`; executable helper scripts
+use the `executable_` source prefix.
+
+chezmoi only manages the skills it knows about, so skills deployed by other
+tooling in `~/.claude/skills/` and all Claude runtime state are left untouched.
+Keep secrets out of skills; use a `.tmpl` suffix with chezmoi data for any
+per-cluster values. See `AGENT.md` for the full workflow.
 
 ## Updating
 
