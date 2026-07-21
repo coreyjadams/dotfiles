@@ -2,7 +2,7 @@
 name: quarto-books
 description: >-
   Build an excellent Quarto book or technical write-up: reproducible, honest,
-  and tuned to its one reader (Peter Sharpe). Covers the templates/ scaffold,
+  and tuned to its one reader (Corey Adams). Covers the templates/ scaffold,
   Tufte-inspired visualization craft, and live-computed numbers with provenance.
   Use when creating or editing a Quarto book or notebook; making figures, plots,
   diagrams, or tables; writing documentation, a report, a design study, or a
@@ -69,15 +69,15 @@ Rules that make this work: define every term and acronym at first use in each en
 - **State assumptions and scope; keep an honest "what this does not solve."** Candor is itself a contribution.
 - **Reverse-outline your draft:** summarize each paragraph in <10 words; if one resists, it has no single point — split or cut; if the summaries don't tell a coherent story, the structure is broken.
 
-## Know your reader: Peter Sharpe
+## Know your reader: Corey Adams
 
-Tailoring is not optional — the same content lands differently depending on what you assume known. Detail in `references/audience-peter.md`.
+Tailoring is not optional — the same content lands differently depending on what you assume known. Detail in `references/audience-corey.md`.
 
-**Assume expert (don't over-explain; use as reference points):** PDEs and their numerics; optimization (gradient/second-order, IPOPT, KKT, MDO at thousands of variables); automatic differentiation and differentiable programming; aerodynamics and aircraft flight physics; physics-informed / scientific ML (neural operators, PINNs, GNNs, neural fields, inductive biases, equivariance, hard constraints); large-scale GPU/HPC; Python scientific stack, JAX (Equinox/Diffrax), PyTorch, CasADi. He builds custom solvers and runs fleets of coding agents. Draw analogies from optimization, differentiable physics, aircraft.
+**Assume expert (don't over-explain; use as reference points):** distributed training and HPC at leadership scale; GPU performance engineering; deep-learning architectures in practice; scientific ML for physical systems; scientific software engineering across Python, C/C++, CUDA, PyTorch, and JAX; fundamental physics; applied mathematics; open-source framework design. He builds parallelism layers and owns whole framework subsystems. Draw analogies from physics, HPC, GPU performance, and framework engineering.
 
-**Motivate and connect (adjacent, not core — he learns fast, so "motivate," never "he can't follow"):** LLM/NLP internals as a research subject; reinforcement learning; formal/theoretical ML (bounds, learning theory); rigorous functional-analysis PDE theory; deep Bayesian machinery (MCMC/VI); non-physical domains (bio, chem, econ). Frame heavy theory around the practical payoff.
+**Motivate and connect (adjacent, not core — he learns fast, so "motivate," never "he can't follow"):** classical numerical PDE/CFD solver internals; aerodynamics and engineering-design domains; LLM/NLP internals as a research subject; reinforcement learning; formal/theoretical ML; deep Bayesian machinery; non-physical domains. Connect these topics to his physics, HPC, and framework-engineering intuitions.
 
-**Match his register:** quantitative and precise — lead with magnitudes and ratios, not adjectives ("100–600× lower MSE"). Fair comparison — always state the controlled variable ("faster *at equal accuracy*"). First-principles, mechanism-driven. Engineering pragmatism — theory that pays off in a real artifact. Open-source by default. Honest about limits. Respects the empirical loop.
+**Match his register:** quantitative and precise — lead with measured magnitudes, name the baseline and workload, and explain the mechanism behind each result. Ground claims in real problems and real systems. Treat physics as ground truth. Tie methods to robust, adopted artifacts rather than notebook-only demonstrations. Open-source and reproducible by default; structure explanations so others can pick them up and run.
 
 ## Operating in a session
 
@@ -105,5 +105,5 @@ docs/<book>/
 ## Templates & reference
 
 - `templates/` — copy-paste Quarto scaffold (`_quarto.yml`, `_common.py`, `index.qmd`, `chapter.qmd`, `99-lab-notebook.qmd`, `.gitignore`). Start here.
-- `references/audience-peter.md` — the detailed reader profile.
+- `references/audience-corey.md` — the detailed reader profile.
 - `references/diagramming.md` — representation choice and reproducible engineering-schematic workflow; read it when making a diagram.
