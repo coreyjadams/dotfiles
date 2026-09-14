@@ -26,7 +26,7 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code)
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI)
 8. Deploys personal Claude Code skills to `~/.claude/skills/`
 
 ## How it works
@@ -38,7 +38,9 @@ chezmoi apply
     |-- run_once_before:  install rustup + stable Rust toolchain (first run only)
     |-- deploy files:     zshrc, micro config, aqua.yaml, etc.
     |-- run_onchange_after: aqua i -a (re-runs when aqua.yaml changes)
-    |-- run_once_after:   install hf CLI (first run only)
+    |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; no-op if hf exists)
+    |-- run_once_after:   install Claude Code (first run only)
+    |-- run_after:        install Codex CLI (every apply; no-op if codex exists)
 ```
 
 ### Tool management with aqua
@@ -51,7 +53,7 @@ Tools are declared in `dot_config/aquaproj-aqua/aqua.yaml` (deployed to `~/.conf
 2. Add the tool to `dot_config/aquaproj-aqua/aqua.yaml`:
    ```yaml
    packages:
-     - name: cli/cli@v2.87.3
+     - name: cli/cli@v2.100.0
      - name: zyedidia/micro@v2.0.13
      - name: junegunn/fzf@v0.60.3      # <-- new tool
    ```
@@ -94,6 +96,27 @@ per-cluster values. See `AGENT.md` for the full workflow.
 ```bash
 chezmoi update    # pull latest changes and apply
 ```
+
+### Refreshing pinned tool versions
+
+All tools are pinned in `aqua.yaml`, so they only move when the pins move. To bump everything to
+the latest upstream release, run aqua's updater against the chezmoi *source* file, review the
+diff, then apply:
+
+```bash
+cd ~/.local/share/chezmoi
+aqua -c dot_config/aquaproj-aqua/aqua.yaml update   # bumps registry ref + every package
+git diff dot_config/aquaproj-aqua/aqua.yaml         # sanity-check versions (tags should keep their `v` prefix)
+chezmoi apply                                       # run_onchange script re-runs `aqua i -a`
+```
+
+Always bump the registry `ref` together with packages: the registry carries per-version asset
+naming rules, so a new tool release can fail to download against an old registry ref (zellij
+0.45 needs a registry newer than the one that knew 0.43, for example). `aqua update` does both.
+
+The aqua binary itself is pinned in `run_once_before_install-aqua.sh` for fresh machines; on an
+existing machine run `aqua update-aqua` to upgrade it in place, and bump the pin in the script
+so new machines match.
 
 ## Platform support
 

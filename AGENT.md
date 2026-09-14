@@ -55,7 +55,7 @@ Script prefixes:
 
 ### If the tool is a Python CLI (not in aqua)
 
-Use `uv tool install` (uv is managed by aqua). See `run_once_after_02-install-hf.sh` for an example.
+Use `uv tool install` (uv is managed by aqua). See `run_onchange_after_02-install-hf.sh.tmpl` for an example.
 
 ### If the tool is a non-binary archive (scripts, etc.)
 
@@ -144,6 +144,19 @@ The Claude Code binary itself is installed by
 `.chezmoiscripts/run_once_after_03-install-claude.sh` (native installer,
 user-space, no sudo). Native installs auto-update in the background, so the
 script only matters on fresh machines.
+
+## Refreshing pinned versions
+
+Bump every aqua-managed tool and the registry ref in one step, from the chezmoi source dir:
+
+```bash
+aqua -c dot_config/aquaproj-aqua/aqua.yaml update
+```
+
+Then review the diff (versions must match the upstream git tag exactly, including any `v` prefix)
+and run `chezmoi apply`. Never bump a package without also bumping the registry `ref`; asset
+naming rules live in the registry. The aqua binary pin lives in
+`run_once_before_install-aqua.sh` (`AQUA_VERSION` and the aqua-installer URL).
 
 ## Testing changes
 
