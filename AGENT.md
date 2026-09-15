@@ -12,7 +12,7 @@ This is a [chezmoi](https://www.chezmoi.io/) dotfiles repo. chezmoi manages conf
 - `.chezmoiscripts/` contains scripts that run during `chezmoi apply`
 - `.chezmoi.toml.tmpl` is the chezmoi config template (prompts for machine-specific data)
 - `.chezmoiexternal.toml` declares archives/files to download from URLs (e.g., ble.sh)
-- `dot_config/aquaproj-aqua/aqua.yaml` declares CLI tools managed by aqua
+- `dot_config/aquaproj-aqua/aqua.yaml` declares CLI tools managed by aqua; `aqua-checksums.json` beside it pins the SHA256 of every asset
 
 ### Shell support
 
@@ -153,8 +153,17 @@ Bump every aqua-managed tool and the registry ref in one step, from the chezmoi 
 aqua -c dot_config/aquaproj-aqua/aqua.yaml update
 ```
 
-Then review the diff (versions must match the upstream git tag exactly, including any `v` prefix)
-and run `chezmoi apply`. Never bump a package without also bumping the registry `ref`; asset
+Then review the diff (versions must match the upstream git tag exactly, including any `v` prefix),
+regenerate checksums, and run `chezmoi apply`:
+
+```bash
+aqua -c dot_config/aquaproj-aqua/aqua.yaml update-checksum -prune
+```
+
+Checksum verification is mandatory (`checksum.require_checksum: true`): any package added or
+bumped in `aqua.yaml` without a matching entry in `aqua-checksums.json` will fail to install.
+Commit both files together. The `run_onchange_` install scripts hash both files, so either
+change triggers a reinstall. Never bump a package without also bumping the registry `ref`; asset
 naming rules live in the registry. The aqua binary pin lives in
 `run_once_before_install-aqua.sh` (`AQUA_VERSION` and the aqua-installer URL).
 

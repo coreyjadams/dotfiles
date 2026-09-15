@@ -105,10 +105,20 @@ diff, then apply:
 
 ```bash
 cd ~/.local/share/chezmoi
-aqua -c dot_config/aquaproj-aqua/aqua.yaml update   # bumps registry ref + every package
-git diff dot_config/aquaproj-aqua/aqua.yaml         # sanity-check versions (tags should keep their `v` prefix)
-chezmoi apply                                       # run_onchange script re-runs `aqua i -a`
+aqua -c dot_config/aquaproj-aqua/aqua.yaml update                 # bumps registry ref + every package
+git diff dot_config/aquaproj-aqua/aqua.yaml                       # sanity-check versions (tags should keep their `v` prefix)
+aqua -c dot_config/aquaproj-aqua/aqua.yaml update-checksum -prune  # refresh aqua-checksums.json for the new versions
+chezmoi apply                                                     # run_onchange script re-runs `aqua i -a`
 ```
+
+### Checksum verification
+
+`aqua.yaml` sets `checksum.enabled` and `checksum.require_checksum`, so aqua refuses to install any
+asset whose SHA256 isn't recorded in `dot_config/aquaproj-aqua/aqua-checksums.json` (deployed next
+to `aqua.yaml`). The file covers linux/macOS on amd64/arm64, so it's generated once here and
+verified on every machine. If you bump a version and forget to regenerate it, `aqua i -a` fails
+with a "checksum not found" error rather than installing an unverified binary; run the
+`update-checksum -prune` command above and re-apply.
 
 Always bump the registry `ref` together with packages: the registry carries per-version asset
 naming rules, so a new tool release can fail to download against an old registry ref (zellij

@@ -1,8 +1,15 @@
 ---
+# Verify SHA256 checksums of every downloaded asset against aqua-checksums.json.
+# After bumping versions, regenerate with:
+#   aqua -c dot_config/aquaproj-aqua/aqua.yaml update-checksum -prune
+checksum:
+  enabled: true
+  require_checksum: true
 registries:
   - type: standard
     ref: v4.562.0
 packages:
+  - name: git-lfs/git-lfs@v3.8.0
   - name: astral-sh/uv@0.12.13
   - name: bootandy/dust@v1.2.5
   - name: BurntSushi/ripgrep@15.2.0
