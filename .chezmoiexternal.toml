@@ -1,6 +1,6 @@
 [".local/share/pi-ext"]
     type = "git-repo"
-    url = "git@gitlab-master.nvidia.com:coreya/pi.git"
+    url = "ssh://git@gitlab-master.nvidia.com:12051/coreya/pi.git"
     refreshPeriod = "168h"
     [".local/share/pi-ext".clone]
         args = ["--depth", "1"]
