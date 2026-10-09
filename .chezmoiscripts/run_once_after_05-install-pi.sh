@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
+export AQUA_GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/aquaproj-aqua/aqua.yaml"
+
 if command -v pi &>/dev/null || [ -x "$HOME/.pi/agent/bin/pi" ]; then
     echo "==> pi is already installed"
     exit 0
