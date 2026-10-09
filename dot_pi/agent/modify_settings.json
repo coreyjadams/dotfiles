@@ -2,7 +2,7 @@
 {{- /* pi rewrites this file itself (deviceId, lastChangelogVersion, /settings).
        Only the keys in $managed are owned by chezmoi; everything else passes through. */ -}}
 {{- $managed := dict
-      "packages" (list (joinPath .chezmoi.sourceDir "pi"))
+      "packages" (list (joinPath .chezmoi.homeDir ".local/share/pi-ext"))
 -}}
 {{- $s := dict -}}
 {{- if trim .chezmoi.stdin -}}{{- $s = fromJson .chezmoi.stdin -}}{{- end -}}

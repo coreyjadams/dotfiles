@@ -1,3 +1,12 @@
+[".local/share/pi-ext"]
+    type = "git-repo"
+    url = "git@gitlab-master.nvidia.com:coreya/pi.git"
+    refreshPeriod = "168h"
+    [".local/share/pi-ext".clone]
+        args = ["--depth", "1"]
+    [".local/share/pi-ext".pull]
+        args = ["--ff-only"]
+
 [".local/share/blesh"]
     type = "archive"
     url = "https://github.com/akinomyoga/ble.sh/releases/download/v0.4.0-devel3/ble-0.4.0-devel3.tar.xz"
