@@ -26,7 +26,7 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI)
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI, pi)
 8. Deploys personal Claude Code skills to `~/.claude/skills/`
 
 ## How it works
@@ -41,6 +41,7 @@ chezmoi apply
     |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; no-op if hf exists)
     |-- run_once_after:   install Claude Code (first run only)
     |-- run_after:        install Codex CLI (every apply; no-op if codex exists)
+    |-- run_once_after:   install pi agent harness (first run only, non-interactive; needs Node >= 22.19)
 ```
 
 ### Tool management with aqua
