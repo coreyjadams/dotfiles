@@ -5,5 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "${SCRIPT_DIR}")"
 
-echo "==> hello-portable skill is deployed at: ${SKILL_DIR}"
+echo "==> hello-portable invoked via: ${SKILL_DIR}"
+echo "==> resolved to:               $(cd "${SKILL_DIR}" && pwd -P)"
 echo "==> chezmoi round-trip verified."
