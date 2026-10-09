@@ -27,7 +27,7 @@ This single command:
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
 7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI, pi)
-8. Deploys personal Claude Code skills to `~/.claude/skills/`
+8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`) and registers the personal pi package
 
 ## How it works
 
@@ -80,17 +80,22 @@ echo "==> Installing mytool..."
 curl -sSfL https://example.com/install.sh | bash
 ```
 
-### Portable Claude Code skills
+### Portable agent skills and pi customizations
 
-Personal Claude Code skills are managed under `dot_claude/skills/` and deploy to
-`~/.claude/skills/<name>/`, so they're version-controlled and portable across
-clusters. Each skill is a directory with a `SKILL.md`; executable helper scripts
-use the `executable_` source prefix.
+Personal skills follow the [Agent Skills](https://agentskills.io) spec and live
+once, in `private_dot_agents/private_skills/`, deploying to `~/.agents/skills/`
+where pi and Codex read them. Claude Code gets a chezmoi-managed symlink per skill
+in `~/.claude/skills/`. Inside pi, `/skill-new <name>` scaffolds all of this.
 
-chezmoi only manages the skills it knows about, so skills deployed by other
-tooling in `~/.claude/skills/` and all Claude runtime state are left untouched.
-Keep secrets out of skills; use a `.tmpl` suffix with chezmoi data for any
-per-cluster values. See `AGENT.md` for the full workflow.
+pi-only customizations (extensions, prompt templates, themes) live in `pi/`, a
+local pi package loaded directly from the chezmoi source dir: edit, `/reload`,
+commit. `~/.pi/agent/settings.json` is managed with a chezmoi modify-template that
+owns only specific keys, so pi's own writes to that file are preserved.
+
+chezmoi only manages the entries it knows about, so skills deployed by other
+tooling and all agent runtime state are left untouched. Keep secrets out; use a
+`.tmpl` suffix with chezmoi data for per-cluster values. See `AGENT.md` for the
+full workflow.
 
 ## Updating
 

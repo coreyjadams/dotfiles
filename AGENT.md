@@ -12,6 +12,7 @@ This is a [chezmoi](https://www.chezmoi.io/) dotfiles repo. chezmoi manages conf
 - `.chezmoiscripts/` contains scripts that run during `chezmoi apply`
 - `.chezmoi.toml.tmpl` is the chezmoi config template (prompts for machine-specific data)
 - `.chezmoiexternal.toml` declares archives/files to download from URLs (e.g., ble.sh)
+- `pi/` is a local pi package (extensions, prompts, themes) loaded in place, not deployed
 - `dot_config/aquaproj-aqua/aqua.yaml` declares CLI tools managed by aqua; `aqua-checksums.json` beside it pins the SHA256 of every asset
 
 ### Shell support
@@ -106,44 +107,89 @@ Use chezmoi naming conventions:
 - `dot_config/bar/baz.toml` deploys to `~/.config/bar/baz.toml`
 - Add `.tmpl` suffix for files that need Go template processing (platform-specific content)
 
-## Adding a Claude skill
+## Agent harnesses (pi, Claude Code, Codex)
 
-Personal Claude Code skills live at `~/.claude/skills/<name>/SKILL.md` and load
-in every session on that machine. chezmoi manages them via `dot_claude/skills/`.
+Three harnesses are installed: Claude Code (`run_once_after_03`), Codex
+(`run_after_04`), and pi (`run_once_after_05`). Customizations are split by
+portability:
 
-1. Create `dot_claude/skills/<name>/SKILL.md` with YAML frontmatter:
+| What | Source | Deployed to | Read by |
+|---|---|---|---|
+| Skills (Agent Skills spec) | `private_dot_agents/private_skills/<name>/` | `~/.agents/skills/<name>/` | pi, Codex |
+| Claude view of the same skills | `dot_claude/skills/symlink_<name>` | `~/.claude/skills/<name>` -> `../../.agents/skills/<name>` | Claude Code |
+| pi extensions, prompt templates, themes | `pi/` (a local pi package) | not deployed; loaded in place | pi |
+| pi settings (managed keys only) | `dot_pi/agent/modify_settings.json` | `~/.pi/agent/settings.json` | pi |
+
+### Adding a skill
+
+Preferred: run `/skill-new <name> [description]` inside pi. It scaffolds the
+skill in the source dir, writes the Claude symlink, runs `chezmoi apply` for
+both targets, and reloads pi. Then edit `SKILL.md` and commit.
+
+Manually:
+
+1. Create `private_dot_agents/private_skills/<name>/SKILL.md`:
    ```markdown
    ---
    name: <name>
-   description: <specific triggers; this is what Claude uses to decide when to load the skill>
+   description: <what it does and when to use it; this drives routing>
    ---
-
-   # <Skill title>
-   ...
    ```
-2. Put any helper scripts under `dot_claude/skills/<name>/scripts/`. Prefix
-   executable scripts with `executable_` in the source (e.g. `executable_check.sh`
-   deploys as `check.sh` with the executable bit set).
-3. Run `chezmoi apply`. The skill appears at `~/.claude/skills/<name>/`.
+   `name` must match the directory: lowercase letters, digits, single hyphens, <= 64 chars.
+2. Create `dot_claude/skills/symlink_<name>` containing `../../.agents/skills/<name>`.
+3. Helper scripts go in `scripts/` with the `executable_` source prefix. Refer to
+   bundled files by paths relative to the skill directory, never `~/.claude/...`
+   or `~/.agents/...`, so the skill works from either location.
+4. `chezmoi apply`, then `/reload` in pi.
 
-Constraints and gotchas:
-- **Never use the `exact_` prefix** on `dot_claude` or `dot_claude/skills`.
-  `~/.claude/skills/` also holds skills deployed by other tooling (e.g.
-  `nvinfo-cli`, `managing-omnistation`); `exact_` would delete anything not in
-  the chezmoi source. Managing only specific skill subdirectories leaves those
-  (and all Claude runtime state under `~/.claude/`) untouched.
-- **Keep secrets out.** Skills are version-controlled and synced everywhere. For
-  per-cluster values, add a `.tmpl` suffix and pull from chezmoi data (see
-  `dot_env_lustre.tmpl`), never hardcode credentials.
-- Plain (non-`.tmpl`) `SKILL.md` files are safe even if they contain `{{ }}`;
-  chezmoi only runs the template engine on files ending in `.tmpl`.
-- Pick distinctive skill names so personal skills don't collide with skills
-  deployed at the system/enterprise level.
+Editing an existing skill: edit under `private_dot_agents/...` (or
+`chezmoi edit ~/.agents/skills/<name>/SKILL.md`) and `chezmoi apply`. Edits made
+directly in `~/.agents/skills/` are overwritten on the next apply.
 
-The Claude Code binary itself is installed by
-`.chezmoiscripts/run_once_after_03-install-claude.sh` (native installer,
-user-space, no sudo). Native installs auto-update in the background, so the
-script only matters on fresh machines.
+### Adding a pi extension, prompt template, or theme
+
+`pi/` is a [pi package](https://pi.dev) that pi loads straight from the chezmoi
+source dir (`.chezmoiignore` keeps chezmoi from deploying it;
+`modify_settings.json` registers its absolute path under `packages`).
+
+- Extensions: `pi/extensions/<name>.ts` or `pi/extensions/<name>/index.ts`.
+  Default-export `function (pi: ExtensionAPI)`. TypeScript loads directly; no build.
+- Prompt templates: `pi/prompts/<command>.md`.
+- Themes: `pi/themes/<theme>.json`.
+
+Dev loop: edit in the source dir, `/reload` in pi, commit. No `chezmoi apply`
+needed. To try an extension in isolation: `pi -e <path-to-file>`.
+
+pi supplies `@earendil-works/pi-ai`, `pi-agent-core`, `pi-coding-agent`,
+`pi-tui`, and `typebox`; keep them in `peerDependencies` only. pi does not run
+`npm install` for local packages; if an extension needs a third-party npm
+dependency, add it to `pi/package.json` and add a `run_onchange_after_` script
+that hashes `pi/package.json` and runs `npm ci` in `{{ .chezmoi.sourceDir }}/pi`.
+
+### pi settings
+
+pi rewrites `~/.pi/agent/settings.json` itself (`deviceId`,
+`lastChangelogVersion`, `/settings`, `pi install`). `modify_settings.json` is a
+chezmoi modify-template: it reads the live file and overwrites only the keys in
+its `$managed` dict, passing everything else through. To pin a setting across
+machines, add it to `$managed`. Third-party pi packages must be listed in
+`$managed.packages` too; anything added with `pi install` is reverted on the
+next apply (`chezmoi diff` shows it).
+
+### Rules for agent dirs
+
+- **Never use the `exact_` prefix** on `dot_claude`, `dot_claude/skills`,
+  `private_dot_agents`, `private_skills`, `dot_pi`, or `dot_pi/agent`. Other
+  tooling deploys skills there (`nvinfo-cli`, `managing-omnistation`,
+  `kernel-factory`), and these dirs hold runtime state.
+- **Never manage** `~/.pi/agent/{auth.json,models-store.json,sessions,install,bin}`
+  or any Claude/Codex credentials or session state.
+- **Keep secrets out.** Everything here syncs to every machine. Use a `.tmpl`
+  suffix and chezmoi data for per-cluster values (see `dot_env_lustre.tmpl`).
+- Plain (non-`.tmpl`) files are safe even if they contain `{{ }}`.
+- Pick distinctive skill names; collisions keep the first discovered skill.
+- `~/.agents` and `~/.agents/skills` use the `private_` prefix (mode 700) to
+  avoid loosening the 750 mode other tooling created them with.
 
 ## Refreshing pinned versions
 
