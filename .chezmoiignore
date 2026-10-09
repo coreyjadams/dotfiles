@@ -1,3 +1,7 @@
 # Repo documentation, not dotfiles
 README.md
 AGENT.md
+
+# Personal pi package; loaded in place from the source dir via ~/.pi/agent/settings.json
+pi
+pi/**

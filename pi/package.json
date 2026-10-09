@@ -1,0 +1,19 @@
+{
+  "name": "corey-pi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal pi extensions, prompt templates, and themes. Loaded in place from the chezmoi source dir.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions"],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  }
+}

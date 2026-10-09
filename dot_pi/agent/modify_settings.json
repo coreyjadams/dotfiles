@@ -1,0 +1,10 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /* pi rewrites this file itself (deviceId, lastChangelogVersion, /settings).
+       Only the keys in $managed are owned by chezmoi; everything else passes through. */ -}}
+{{- $managed := dict
+      "packages" (list (joinPath .chezmoi.sourceDir "pi"))
+-}}
+{{- $s := dict -}}
+{{- if trim .chezmoi.stdin -}}{{- $s = fromJson .chezmoi.stdin -}}{{- end -}}
+{{- range $k, $v := $managed -}}{{- $s = setValueAtPath $k $v $s -}}{{- end -}}
+{{- toPrettyJson "  " $s -}}
