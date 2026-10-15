@@ -3,6 +3,10 @@
        Only the keys in $managed are owned by chezmoi; everything else passes through. */ -}}
 {{- $managed := dict
       "packages" (list (joinPath .chezmoi.homeDir ".local/share/pi-ext") "git:github.com/DietrichGebert/ponytail")
+      "defaultProvider" "anthropic"
+      "defaultModel" "claude-opus-5-5"
+      "defaultThinkingLevel" "medium"
+      "retry" (dict "maxRetries" 10 "maxAgentDelayMs" 120000)
 -}}
 {{- $s := dict -}}
 {{- if trim .chezmoi.stdin -}}{{- $s = fromJson .chezmoi.stdin -}}{{- end -}}
