@@ -1,6 +1,6 @@
 ---
 name: hello-portable
-description: A trivial test skill to verify chezmoi-managed personal skills load in pi, Codex, and Claude Code. Use only when the user explicitly asks to test the portable skills setup.
+description: A trivial test skill to verify chezmoi-managed personal skills load in pi and Claude Code. Use only when the user explicitly asks to test the portable skills setup.
 ---
 
 # Hello Portable

@@ -26,7 +26,7 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI, pi, rig)
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, rig)
 8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`), registers the personal pi package, and lists the private rig plugins in `~/.rig/plugins.toml`
 
 ## How it works
@@ -40,7 +40,6 @@ chezmoi apply
     |-- run_onchange_after: aqua i -a (re-runs when aqua.yaml changes)
     |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; no-op if hf exists)
     |-- run_once_after:   install Claude Code (first run only)
-    |-- run_after:        install Codex CLI (every apply; no-op if codex exists)
     |-- run_once_after:   install pi agent harness (first run only, non-interactive; needs Node >= 22.19)
     |-- run_after:        install rig, or update it to the newest stable of rig-ext's RIG_VERSION series (every apply; needs cargo)
     |-- run_after:        list the private rig-ext plugins in ~/.rig/plugins.toml (every apply; skipped without the clone)
@@ -86,7 +85,7 @@ curl -sSfL https://example.com/install.sh | bash
 
 Personal skills follow the [Agent Skills](https://agentskills.io) spec and live
 once, in `private_dot_agents/private_skills/`, deploying to `~/.agents/skills/`
-where pi and Codex read them. Claude Code gets a chezmoi-managed symlink per skill
+where pi reads them. Claude Code gets a chezmoi-managed symlink per skill
 in `~/.claude/skills/`. Inside pi, `/skill-new <name>` scaffolds all of this.
 
 pi-only customizations (extensions, prompt templates, themes) live in `pi/`, a

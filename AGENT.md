@@ -107,16 +107,16 @@ Use chezmoi naming conventions:
 - `dot_config/bar/baz.toml` deploys to `~/.config/bar/baz.toml`
 - Add `.tmpl` suffix for files that need Go template processing (platform-specific content)
 
-## Agent harnesses (rig, pi, Claude Code, Codex)
+## Agent harnesses (rig, pi, Claude Code)
 
-Four harnesses are installed: Claude Code (`run_once_after_03`), Codex
-(`run_after_04`), pi (`run_once_after_05`), and rig (`run_after_06`, with its
+Three harnesses are installed: Claude Code (`run_once_after_03`), pi
+(`run_once_after_05`), and rig (`run_after_06`, with its
 private plugins listed by `run_after_07`). Customizations are split by
 portability:
 
 | What | Source | Deployed to | Read by |
 |---|---|---|---|
-| Skills (Agent Skills spec) | `private_dot_agents/private_skills/<name>/` | `~/.agents/skills/<name>/` | pi, Codex |
+| Skills (Agent Skills spec) | `private_dot_agents/private_skills/<name>/` | `~/.agents/skills/<name>/` | pi |
 | Claude view of the same skills | `dot_claude/skills/symlink_<name>` | `~/.claude/skills/<name>` -> `../../.agents/skills/<name>` | Claude Code |
 | pi extensions, prompt templates, themes | `pi/` (a local pi package) | not deployed; loaded in place | pi |
 | pi settings (managed keys only) | `dot_pi/agent/modify_settings.json` | `~/.pi/agent/settings.json` | pi |
@@ -211,7 +211,7 @@ next apply (`chezmoi diff` shows it).
   tooling deploys skills there (`nvinfo-cli`, `managing-omnistation`,
   `kernel-factory`), and these dirs hold runtime state.
 - **Never manage** `~/.pi/agent/{auth.json,models-store.json,sessions,install,bin}`
-  or any Claude/Codex credentials or session state.
+  or any Claude credentials or session state.
 - **Keep secrets out.** Everything here syncs to every machine. Use a `.tmpl`
   suffix and chezmoi data for per-cluster values (see `dot_env_lustre.tmpl`).
 - Plain (non-`.tmpl`) files are safe even if they contain `{{ }}`.
