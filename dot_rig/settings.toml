@@ -1,0 +1,12 @@
+# rig settings; read at startup (/reload after a change).
+
+# corey_rig::CapacityPlugin: when the gateway says the model is at capacity
+# (429), retry the same model up to 12 times, backing off to 60 s. It never
+# switches models.
+[capacity]
+
+# Side calls on a cheaper model, off the main model's shared token budget:
+# [btw]
+# model = "nvidia-inference/openai/openai/gpt-5.1-codex"
+# [session_title]
+# model = "nvidia-inference/openai/openai/gpt-5.1-codex"
