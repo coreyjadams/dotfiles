@@ -26,8 +26,8 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI, pi)
-8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`) and registers the personal pi package
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, Codex CLI, pi, rig)
+8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`), registers the personal pi package, and lists the private rig plugins in `~/.rig/plugins.toml`
 
 ## How it works
 
@@ -42,6 +42,8 @@ chezmoi apply
     |-- run_once_after:   install Claude Code (first run only)
     |-- run_after:        install Codex CLI (every apply; no-op if codex exists)
     |-- run_once_after:   install pi agent harness (first run only, non-interactive; needs Node >= 22.19)
+    |-- run_after:        install rig, or update it to the newest stable of rig-ext's RIG_VERSION series (every apply; needs cargo)
+    |-- run_after:        list the private rig-ext plugins in ~/.rig/plugins.toml (every apply; skipped without the clone)
 ```
 
 ### Tool management with aqua

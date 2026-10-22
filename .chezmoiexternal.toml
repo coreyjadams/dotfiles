@@ -7,6 +7,15 @@
     [".local/share/pi-ext".pull]
         args = ["--ff-only"]
 
+[".local/share/rig-ext"]
+    type = "git-repo"
+    url = "ssh://git@gitlab-master.nvidia.com:12051/coreya/rig-ext.git"
+    refreshPeriod = "168h"
+    [".local/share/rig-ext".clone]
+        args = ["--depth", "1"]
+    [".local/share/rig-ext".pull]
+        args = ["--ff-only"]
+
 [".local/share/blesh"]
     type = "archive"
     url = "https://github.com/akinomyoga/ble.sh/releases/download/v0.4.0-devel3/ble-0.4.0-devel3.tar.xz"
