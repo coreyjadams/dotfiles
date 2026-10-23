@@ -10,3 +10,11 @@
 # model = "nvidia-inference/openai/openai/gpt-5.1-codex"
 # [session_title]
 # model = "nvidia-inference/openai/openai/gpt-5.1-codex"
+
+# corey_rig::ContextPruningPlugin: off. Stubbing old tool results rewrites
+# history mid-session, so on Claude via Inference Hub each prune re-writes
+# the whole cached prefix (~100k tokens at 1.25x) to save a few thousand
+# read at 0.1x. Compaction still trims near the window; `/prune on` for a
+# session.
+[context_pruning]
+enabled = false
