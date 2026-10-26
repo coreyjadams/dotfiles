@@ -6,7 +6,7 @@
       "defaultProvider" "anthropic"
       "defaultModel" "claude-opus-5-5"
       "defaultThinkingLevel" "medium"
-      "retry" (dict "maxRetries" 10 "maxAgentDelayMs" 120000)
+      "retry" (dict "maxRetries" 10 "baseDelayMs" 5000 "maxAgentDelayMs" 5000)
 -}}
 {{- $s := dict -}}
 {{- if trim .chezmoi.stdin -}}{{- $s = fromJson .chezmoi.stdin -}}{{- end -}}
