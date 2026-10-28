@@ -1,5 +1,10 @@
+{{- /* Omnistations allow only allow-listed github.com repos; aqua, ble.sh and
+       ponytail download from third-party GitHub repos. Re-run `chezmoi init`
+       if access changes. */ -}}
+{{- $github := eq (output "sh" "-c" "curl -s -o /dev/null -m 5 -w '%{http_code}' 'https://github.com/aquaproj/aqua-installer.git/info/refs?service=git-upload-pack' || true") "200" -}}
 [data]
-{{- if eq .chezmoi.os "linux" }}
+    github = {{ $github }}
+{{- if and (eq .chezmoi.os "linux") $github }}
     user_lustre = {{ promptStringOnce . "user_lustre" "What is the USER_LUSTRE path for this cluster?" | quote }}
     group_lustre = {{ promptStringOnce . "group_lustre" "What is the GROUP_LUSTRE path for this cluster?" | quote }}
 {{- end }}

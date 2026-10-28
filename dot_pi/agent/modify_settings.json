@@ -1,8 +1,11 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- /* pi rewrites this file itself (deviceId, lastChangelogVersion, /settings).
        Only the keys in $managed are owned by chezmoi; everything else passes through. */ -}}
+{{- $packages := list (joinPath .chezmoi.homeDir ".local/share/pi-ext") -}}
+{{- if or (not (hasKey . "github")) .github -}}{{- $packages = append $packages "git:github.com/DietrichGebert/ponytail" -}}
+{{- else -}}{{- $packages = append $packages (joinPath .chezmoi.homeDir ".local/share/ponytail") -}}{{- end -}}
 {{- $managed := dict
-      "packages" (list (joinPath .chezmoi.homeDir ".local/share/pi-ext") "git:github.com/DietrichGebert/ponytail")
+      "packages" $packages
       "defaultProvider" "anthropic"
       "defaultModel" "claude-opus-5-5"
       "defaultThinkingLevel" "medium"

@@ -5,3 +5,25 @@ AGENT.md
 # Personal pi package; loaded in place from the source dir via ~/.pi/agent/settings.json
 pi
 pi/**
+
+{{- if and (hasKey . "github") (not .github) }}
+
+# github.com blocked (Omnistation): aqua tools can't install, so deploy only the
+# agent setup and keep the machine's own shell/git config (its PATH, git hooks).
+.bashrc
+.bash_profile
+.zshrc
+.gitconfig
+.env_lustre
+.config/micro
+.config/micro/**
+.config/zellij
+.config/zellij/**
+.config/aquaproj-aqua
+.config/aquaproj-aqua/**
+.local/bin/slt
+.local/bin/__pycache__
+.local/bin/__pycache__/**
+.local/share/bash-completion
+.local/share/bash-completion/**
+{{- end }}

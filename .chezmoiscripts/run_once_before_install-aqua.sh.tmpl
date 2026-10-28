@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+{{- if and (hasKey . "github") (not .github) }}
+echo "==> github.com is blocked here (chezmoi data github=false); skipping aqua"
+exit 0
+{{- end }}
+
 AQUA_BIN="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin"
 
 if [ -x "${AQUA_BIN}/aqua" ]; then

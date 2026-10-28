@@ -16,7 +16,22 @@ or
 sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply --ssh coreyjadams
 ```
 
+### Omnistation (github.com blocked)
 
+Omnistations reach only allow-listed GitHub repos, so `get.chezmoi.io` and
+this repo's GitHub URL fail. A private mirror lives on NVIDIA GitLab (`git
+push` updates both). With a GitLab SSH key on the station:
+
+```bash
+sudo snap install chezmoi --classic
+chezmoi init --apply ssh://git@gitlab-master.nvidia.com:12051/coreya/dotfiles.git
+```
+
+`chezmoi init` probes GitHub and stores `github = false`. Then only the agent
+setup is deployed (skills, `AGENTS.md`, pi settings, pi-ext, rig): no aqua
+tools or ble.sh, and the machine keeps its own shell and git config (see
+`.chezmoiignore`). ponytail comes from a codeload.github.com tarball instead of
+a `git:` package. Re-run `chezmoi init` if GitHub access changes.
 
 
 This single command:

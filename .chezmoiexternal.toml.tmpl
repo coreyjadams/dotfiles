@@ -16,8 +16,21 @@
     [".local/share/rig-ext".pull]
         args = ["--ff-only"]
 
+{{- if and (hasKey . "github") (not .github) }}
+
+# pi can't `git:` install ponytail where github.com is blocked, but codeload
+# (tarballs) is reachable; modify_settings.json loads it from this path.
+[".local/share/ponytail"]
+    type = "archive"
+    url = "https://codeload.github.com/DietrichGebert/ponytail/tar.gz/refs/heads/main"
+    exact = true
+    stripComponents = 1
+    refreshPeriod = "168h"
+{{- else }}
+
 [".local/share/blesh"]
     type = "archive"
     url = "https://github.com/akinomyoga/ble.sh/releases/download/v0.4.0-devel3/ble-0.4.0-devel3.tar.xz"
     exact = true
     stripComponents = 1
+{{- end }}
