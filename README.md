@@ -38,11 +38,12 @@ chezmoi apply
     |-- run_once_before:  install rustup + stable Rust toolchain (first run only)
     |-- deploy files:     zshrc, micro config, aqua.yaml, etc.
     |-- run_onchange_after: aqua i -a (re-runs when aqua.yaml changes)
-    |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; no-op if hf exists)
+    |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; installs/upgrades to the pinned minimum)
     |-- run_once_after:   install Claude Code (first run only)
     |-- run_once_after:   install pi agent harness (first run only, non-interactive; needs Node >= 22.19)
     |-- run_after:        install rig, or update it to the newest stable of rig-ext's RIG_VERSION series (every apply; needs cargo)
     |-- run_after:        list the private rig-ext plugins in ~/.rig/plugins.toml (every apply; skipped without the clone)
+    |-- run_after:        npm ci for pi-ext extensions with a package-lock.json (every apply; only when the lock changed)
 ```
 
 ### Tool management with aqua
