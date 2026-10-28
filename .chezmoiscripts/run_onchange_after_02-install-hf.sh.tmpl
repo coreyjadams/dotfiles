@@ -8,20 +8,16 @@ set -euo pipefail
 export PATH="${AQUA_ROOT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua}/bin:$PATH"
 export AQUA_GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/aquaproj-aqua/aqua.yaml"
 
-if command -v hf &>/dev/null; then
-    echo "==> hf CLI is already installed"
-    exit 0
-fi
-
 if ! command -v uv &>/dev/null; then
     echo "WARNING: uv not found; skipping Hugging Face CLI install." >&2
     echo "         Run 'aqua i -a' then re-run 'chezmoi apply'." >&2
     exit 0
 fi
 
-echo "==> Installing Hugging Face CLI via uv..."
-if uv tool install huggingface-hub[cli]; then
-    echo "==> hf CLI installed successfully"
+# Bumping this minimum changes the script, so chezmoi re-runs it and upgrades hf.
+echo "==> Installing/upgrading Hugging Face CLI via uv..."
+if uv tool install --upgrade 'huggingface-hub[cli]>=1.23'; then
+    echo "==> hf CLI up to date: $(hf version 2>/dev/null || true)"
 else
     echo "WARNING: hf CLI install failed (exit $?). Re-run 'chezmoi apply' to retry." >&2
 fi
