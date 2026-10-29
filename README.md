@@ -41,7 +41,7 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, rig)
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, rig, Herdr)
 8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`), registers the personal pi package, and lists the private rig plugins in `~/.rig/plugins.toml`
 
 ## How it works
@@ -59,7 +59,14 @@ chezmoi apply
     |-- run_after:        install rig, or update it to the newest stable of rig-ext's RIG_VERSION series (every apply; needs cargo)
     |-- run_after:        list the private rig-ext plugins in ~/.rig/plugins.toml (every apply; skipped without the clone)
     |-- run_after:        npm ci for pi-ext extensions with a package-lock.json (every apply; only when the lock changed)
+    |-- run_once_after:   install Herdr: the app on macOS, headless herdr-core (`hc`) on Linux (first run only)
 ```
+
+Herdr shows every terminal and agent on every machine in one sidebar. Where
+`releases.herdr.dev` is blocked (Omnistations), the Linux install fails
+harmlessly; add the machine from the Mac instead, which copies `hc` over ssh:
+`hc machine add <ssh-host> --name <name> --install`. Update a remote one with
+`hc machine update <name>`.
 
 ### Tool management with aqua
 
