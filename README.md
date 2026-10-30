@@ -77,7 +77,7 @@ stale; clicking it runs `sync-logins <machine>` (or `local`) in a tab.
 `herd` starts ready-made pi agents in Herdr tabs: `herd review <pr>` (pi-ext
 `/review`, never posts), `herd talk <folder> <brief>` (Quarto revealjs via the
 quarto-books skill), `herd code <machine> <task>` (a login-node coding agent;
-refuses machines without pi-ext's slurm-guard).
+refuses machines without pi-ext's slurm-guard). In Herdr: cmd-shift-a or "+ agent" in pi tasks opens the same as a form (mod `herd-launcher`).
 
 ### Tool management with aqua
 
