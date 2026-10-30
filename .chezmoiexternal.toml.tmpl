@@ -7,6 +7,15 @@
     [".local/share/pi-ext".pull]
         args = ["--ff-only"]
 
+# blader/humanizer skill (MIT): one SKILL.md. From codeload, which stations reach too.
+[".agents/skills/humanizer"]
+    type = "archive"
+    url = "https://codeload.github.com/blader/humanizer/tar.gz/refs/heads/main"
+    exact = true
+    stripComponents = 1
+    include = ["*/SKILL.md", "*/LICENSE"]
+    refreshPeriod = "168h"
+
 {{- if and (hasKey . "github") (not .github) }}
 
 # pi can't `git:` install ponytail where github.com is blocked, but codeload
