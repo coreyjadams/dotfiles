@@ -1,0 +1,97 @@
+#!/bin/bash
+# sync-logins: bring every Herdr machine (`hc machine ls`) up to date with this Mac:
+# chezmoi update (dotfiles + install scripts: node, pi, pi-ext deps), `pi update --all`,
+# then `hc machine update`. Machines run in parallel; logs go to
+# ~/.local/state/sync-logins/<machine>.log. Usage: sync-logins [machine...]
+#
+# Machines pull from the git remotes, so push chezmoi and pi-ext first: the
+# preflight warns about uncommitted or unpushed work here.
+set -uo pipefail
+
+logs="${XDG_STATE_HOME:-$HOME/.local/state}/sync-logins"
+mkdir -p "$logs"
+
+# --- preflight: what the machines can't get yet ---
+for repo in "$HOME/.local/share/chezmoi" "$HOME/.local/share/pi-ext"; do
+    [ -d "$repo/.git" ] || continue
+    name=$(basename "$repo")
+    dirty=$(git -C "$repo" status --porcelain | wc -l | tr -d ' ')
+    ahead=$(git -C "$repo" rev-list --count '@{u}..HEAD' 2>/dev/null || echo "?")
+    [ "$dirty" != 0 ] && echo "warning: $name has $dirty uncommitted change(s); machines won't get them" >&2
+    [ "$ahead" != 0 ] && echo "warning: $name has $ahead unpushed commit(s); machines won't get them" >&2
+done
+
+# --- runs on each machine (bash -l, so its own PATH setup applies) ---
+remote=$(cat <<'EOF'
+export PATH="$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.pi/agent/bin:${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua/bin:/snap/bin:$PATH"
+src="$HOME/.local/share/chezmoi"
+cz_state=skipped
+if [ -d "$src/.git" ]; then
+    if ! command -v chezmoi >/dev/null; then
+        echo "==> installing chezmoi to ~/bin"
+        sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/bin" || true
+    fi
+    if command -v chezmoi >/dev/null; then
+        echo "==> chezmoi update"
+        if chezmoi update --force --no-tty --refresh-externals=always </dev/null; then cz_state=ok; else cz_state=failed; fi
+    else
+        cz_state=no-chezmoi
+    fi
+fi
+# The pi install script is run_once: it may have run (and failed) before node existed.
+if ! command -v pi >/dev/null && [ -f "$src/.chezmoiscripts/run_once_after_05-install-pi.sh" ]; then
+    echo "==> installing pi"
+    bash "$src/.chezmoiscripts/run_once_after_05-install-pi.sh" </dev/null
+    hash -r
+fi
+pi_state=missing
+if command -v pi >/dev/null; then
+    echo "==> pi update --all"
+    if pi update --all </dev/null; then pi_state=ok; else pi_state=failed; fi
+fi
+echo "RESULT chezmoi=$cz_state@$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo -) pi=$pi_state@$(pi --version 2>/dev/null || echo -) pi-ext=$(git -C "$HOME/.local/share/pi-ext" rev-parse --short HEAD 2>/dev/null || echo -)"
+EOF
+)
+
+# --- machines: name<TAB>ssh target ---
+list=$(hc machine ls --json | python3 -c '
+import json, sys
+for m in json.load(sys.stdin)["machines"]:
+    if not m.get("temporary") and not m.get("via"):
+        print(m["name"] + "\t" + m["target"])')
+if [ $# -gt 0 ]; then
+    list=$(printf '%s\n' "$list" | awk -F'\t' -v want=" $* " 'index(want, " " $1 " ")')
+fi
+[ -n "$list" ] || { echo "no machines to sync" >&2; exit 1; }
+
+sync_one() {
+    local name=$1 target=$2 log="$logs/$1.log"
+    {
+        echo "### $(date) $name ($target)"
+        # ControlPath=none: never ride an ssh master that points at another login node.
+        ssh -o BatchMode=yes -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none \
+            "$target" 'bash -l -s' <<<"$remote" 2>&1
+        echo "==> hc machine update $name"
+        hc machine update "$name" 2>&1
+    } >"$log" 2>&1
+}
+
+echo "syncing: $(printf '%s\n' "$list" | cut -f1 | tr '\n' ' ')(logs: $logs)"
+while IFS=$'\t' read -r name target; do
+    sync_one "$name" "$target" &
+done <<<"$list"
+wait
+
+printf '\n%-8s %s\n' machine result
+status=0
+while IFS=$'\t' read -r name _; do
+    line=$(grep -a '^RESULT ' "$logs/$name.log" | tail -1)
+    if [ -z "$line" ]; then
+        line="unreachable or aborted: $(grep -av '^###' "$logs/$name.log" | tail -1)"
+        status=1
+    fi
+    case "$line" in *failed*|*no-chezmoi*|*pi=missing*) status=1 ;; esac
+    printf '%-8s %s\n' "$name" "${line#RESULT }"
+done <<<"$list"
+[ $status = 0 ] || echo "see $logs/<machine>.log for problems" >&2
+exit $status

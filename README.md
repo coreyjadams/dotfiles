@@ -28,7 +28,7 @@ chezmoi init --apply ssh://git@gitlab-master.nvidia.com:12051/coreya/dotfiles.gi
 ```
 
 `chezmoi init` probes GitHub and stores `github = false`. Then only the agent
-setup is deployed (skills, `AGENTS.md`, pi settings, pi-ext, rig): no aqua
+setup is deployed (skills, `AGENTS.md`, pi settings, pi-ext): no aqua
 tools or ble.sh, and the machine keeps its own shell and git config (see
 `.chezmoiignore`). ponytail comes from a codeload.github.com tarball instead of
 a `git:` package. Re-run `chezmoi init` if GitHub access changes.
@@ -41,8 +41,8 @@ This single command:
 4. Installs rustup (Rust toolchain manager)
 5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
 6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, rig, Herdr)
-8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`), registers the personal pi package, and lists the private rig plugins in `~/.rig/plugins.toml`
+7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, Herdr)
+8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`) and registers the personal pi package
 
 ## How it works
 
@@ -56,8 +56,6 @@ chezmoi apply
     |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; installs/upgrades to the pinned minimum)
     |-- run_once_after:   install Claude Code (first run only)
     |-- run_once_after:   install pi agent harness (first run only, non-interactive; needs Node >= 22.19)
-    |-- run_after:        install rig, or update it to the newest stable of rig-ext's RIG_VERSION series (every apply; needs cargo)
-    |-- run_after:        list the private rig-ext plugins in ~/.rig/plugins.toml (every apply; skipped without the clone)
     |-- run_after:        npm ci for pi-ext extensions with a package-lock.json (every apply; only when the lock changed)
     |-- run_once_after:   install Herdr: the app on macOS, headless herdr-core (`hc`) on Linux (first run only)
 ```
@@ -67,6 +65,11 @@ Herdr shows every terminal and agent on every machine in one sidebar. Where
 harmlessly; add the machine from the Mac instead, which copies `hc` over ssh:
 `hc machine add <ssh-host> --name <name> --install`. Update a remote one with
 `hc machine update <name>`.
+
+`sync-logins [machine...]` (run on the Mac, after pushing this repo and pi-ext)
+updates every Herdr machine: `chezmoi update`, `pi update --all` and
+`hc machine update`, in parallel, with a summary table and logs in
+`~/.local/state/sync-logins/`.
 
 ### Tool management with aqua
 

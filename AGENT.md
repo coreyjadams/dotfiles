@@ -107,12 +107,10 @@ Use chezmoi naming conventions:
 - `dot_config/bar/baz.toml` deploys to `~/.config/bar/baz.toml`
 - Add `.tmpl` suffix for files that need Go template processing (platform-specific content)
 
-## Agent harnesses (rig, pi, Claude Code)
+## Agent harnesses (pi, Claude Code)
 
-Three harnesses are installed: Claude Code (`run_once_after_03`), pi
-(`run_once_after_05`), and rig (`run_after_06`, with its
-private plugins listed by `run_after_07`). Customizations are split by
-portability:
+Two harnesses are installed: Claude Code (`run_once_after_03`) and pi
+(`run_once_after_05`). Customizations are split by portability:
 
 | What | Source | Deployed to | Read by |
 |---|---|---|---|
@@ -120,13 +118,10 @@ portability:
 | Claude view of the same skills | `dot_claude/skills/symlink_<name>` | `~/.claude/skills/<name>` -> `../../.agents/skills/<name>` | Claude Code |
 | pi extensions, prompt templates, themes | `pi/` (a local pi package) | not deployed; loaded in place | pi |
 | pi settings (managed keys only) | `dot_pi/agent/modify_settings.json` | `~/.pi/agent/settings.json` | pi |
-| rig plugins (Rust, private) | the `coreya/rig-ext` GitLab repo (external) | `~/.local/share/rig-ext`, listed in `~/.rig/plugins.toml` | rig |
-
-rig also reads `~/.agents/skills`, so the skills above reach it with no extra step.
 
 ### Adding a skill
 
-Preferred: run `/skill-new <name> [description]` inside pi or rig. It scaffolds the
+Preferred: run `/skill-new <name> [description]` inside pi. It scaffolds the
 skill in the source dir, writes the Claude symlink, runs `chezmoi apply` for
 both targets, and reloads pi. Then edit `SKILL.md` and commit.
 
@@ -169,30 +164,6 @@ pi supplies `@earendil-works/pi-ai`, `pi-agent-core`, `pi-coding-agent`,
 `npm install` for local packages; if an extension needs a third-party npm
 dependency, add it to `pi/package.json` and add a `run_onchange_after_` script
 that hashes `pi/package.json` and runs `npm ci` in `{{ .chezmoi.sourceDir }}/pi`.
-
-### rig and its plugins
-
-`run_after_06-install-rig.sh` runs on every apply: it installs `rig` with
-`cargo install rig --locked`, or moves it to the newest stable release of the
-series that `~/.local/share/rig-ext/RIG_VERSION` names (such as `0.45`; any
-release without the file). rig is pre-1.0 and a minor release breaks plugins,
-so moving to a new series is a rig-ext change: bump its crates and
-`RIG_VERSION`, push. A launcher installed from a checkout (`cargo install
---path`) is left alone unless `RIG_FORCE_STABLE=1`. Offline it keeps what is
-installed. rig has no self-update command; this script is how it updates.
-
-The plugins live in the private `coreya/rig-ext` repo (GitLab), a
-`.chezmoiexternal.toml` git-repo at `~/.local/share/rig-ext`, the same way the
-pi extensions do. `run_after_07-rig-ext.sh` runs its `install.sh`, which adds
-any plugin of its `plugins.list` missing from `~/.rig/plugins.toml` (`rig
-plugin add --path`) and leaves entries turned off with `rig plugin disable`
-off. Without GitLab access the clone is absent and both steps skip it. The
-agent is built by `rig` itself on its next start (minutes the first time).
-rig-ext's README lists the plugins and how to add one.
-
-**Never manage** `~/.rig/{auth,sessions,data,target,project,bin,run}` or
-`~/.rig/plugins.toml` with chezmoi: rig rewrites them. `~/.rig/providers.toml`
-is per machine (its `key_command` reads the macOS keychain).
 
 ### pi settings
 
