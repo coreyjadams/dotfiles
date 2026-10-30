@@ -1,5 +1,5 @@
 // New agent: a form over the `herd` launcher (~/.local/bin/herd, from chezmoi).
-// review a PR, build a Quarto talk, or start a coding agent on a cluster.
+// review a PR or start a coding agent (here or on a cluster); build a Quarto talk (here).
 // Opened as a dialog: `mod.open herd-launcher` (cmd-shift-a, pi tasks' "+ agent").
 
 import { View, div, svg } from "gpui-kit";
@@ -20,7 +20,7 @@ export function splitArgs(s) {
 
 export function herdArgs(kind, v, machine, space) {
   const pre = space ? ["--space", space] : [];
-  if (kind === "review") return [...pre, "review", v.pr.trim(), ...splitArgs(v.flags)];
+  if (kind === "review") return [...pre, "review", machine, v.pr.trim(), ...splitArgs(v.flags)];
   if (kind === "talk") return [...pre, "talk", v.folder.trim(), v.brief.trim()];
   return [...pre, "code", machine, ...(v.cwd.trim() ? ["--cwd", v.cwd.trim()] : []), v.task.trim()];
 }
@@ -28,7 +28,7 @@ export function herdArgs(kind, v, machine, space) {
 export function missing(kind, v, machine) {
   const need = { review: ["pr"], talk: ["folder", "brief"], code: ["task"] }[kind];
   const gaps = need.filter((k) => !v[k]?.trim());
-  if (kind === "code" && !machine) gaps.push("machine");
+  if (kind !== "talk" && !machine) gaps.push("machine");
   return gaps;
 }
 
@@ -46,7 +46,7 @@ export default class HerdLauncher extends View {
       }
     this.machines = [];   // connected remote machines
     this.guarded = {};    // machine -> has slurm-guard (true/false), undefined while checking
-    this.machine = null;
+    this.machine = "local"; // review and code: "local" or a Herdr machine
     this.space = null;    // space name, null: herd's default
     this.error = null;
     this.busy = false;
@@ -59,7 +59,6 @@ export default class HerdLauncher extends View {
       await Promise.all(this.machines.map(async (m) => {
         const g = await exec("sh", ["-c", 'test -d "$HOME/.local/share/pi-ext/extensions/slurm-guard"'], { on: m }).catch(() => null);
         this.guarded[m] = g?.code === 0;
-        if (!this.machine && this.guarded[m]) this.machine = m;
         cx.notify();
       }));
     });
@@ -69,6 +68,15 @@ export default class HerdLauncher extends View {
     const first = this.inputs[FIELDS[this.kind][this.kind === "code" ? 1 : 0][0]];
     first.focus();
     cx.timer.after(300, () => first.focus());
+  }
+
+  setKind(k, cx) {
+    if (this.kind === k) return;
+    this.kind = k;
+    this.error = null;
+    this.space = null;
+    this.focusFirst(cx); // this click's cx, not the render's
+    cx.notify();
   }
 
   start(cx) {
@@ -107,18 +115,21 @@ export default class HerdLauncher extends View {
       .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
       .hover((s) => s.opacity(0.88)).on_click(action).child(text);
 
-    const where = this.kind === "code" ? this.machine : null;
+    const where = this.kind === "talk" || this.machine === "local" ? null : this.machine;
     const spaceNames = [...new Set(spaces().filter((s) => (s.machine ?? null) === where).map((s) => s.name))];
 
     const body = v_flex();
-    if (this.kind === "code") {
+    if (this.kind !== "talk") {
       body.child(label("Machine"))
-        .child(h_flex().flex_wrap().gap(6).children(this.machines.map((m) => {
+        .child(h_flex().flex_wrap().gap(6)
+          .child(chip("m-local", "this computer", this.machine === "local", true, () => { this.machine = "local"; this.space = null; }))
+          .children(this.machines.map((m) => {
           const g = this.guarded[m];
           return chip(`m-${m}`, m, this.machine === m, g === true, () => { this.machine = m; this.space = null; },
-            g === false ? "no slurm-guard here yet (pi-ext missing): sync it first" : g === undefined ? "checking…" : null);
-        })))
-        .when(this.machines.length === 0, (el) => el.child(div().text_size(12).text_color(t.muted).child("No connected machines")));
+            g === false ? "no pi-ext here yet (slurm-guard, /review): sync it first" : g === undefined ? "checking…" : null);
+        })));
+    } else {
+      body.child(div().pt(10).text_size(11.5).text_color(t.dim).child("Talks are built on this computer."));
     }
     for (const [key] of FIELDS[this.kind]) {
       const name = { pr: "Pull request", flags: "Review options", folder: "Folder", brief: "Brief", cwd: "Folder", task: "Task" }[key];
@@ -141,7 +152,15 @@ export default class HerdLauncher extends View {
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().gap(8)
         .child(div().flex_1().text_size(15).font_semibold().child("New agent"))
-        .children(KINDS.map((k) => chip(`k-${k}`, k, this.kind === k, true, () => { this.kind = k; this.error = null; this.focusFirst(cx); }))))
+        // Segmented control: whole segments are the hit targets.
+        .child(h_flex().p(2).gap(2).rounded(8).bg(t.raised).border_1().border_color(t.input)
+          .children(KINDS.map((k) => div().id(`k-${k}`).w(72).h(26).flex().items_center().justify_center()
+            .rounded(6).text_size(12.5).cursor_pointer()
+            .bg(this.kind === k ? t.solid : t.raised)
+            .text_color(this.kind === k ? t.solid_foreground : t.foreground)
+            .when(this.kind !== k, (el) => el.hover((s) => s.bg(t.hover)))
+            .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.setKind(k, cx); })
+            .child(k)))))
       .child(body)
       .when(Boolean(this.error), (el) => el.child(div().pt(10).text_size(12).text_color(t.blocked ?? t.accent).child(this.error)))
       .child(h_flex().pt(18).gap(8).items_center()

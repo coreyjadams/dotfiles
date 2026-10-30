@@ -1,10 +1,11 @@
 #!/bin/bash
 # herd: start a ready-made pi agent in a Herdr tab you can watch and steer.
 #
-#   herd review <pr|url> [/review flags...]          multi-agent PR review (pi-ext /review); nothing is posted
-#   herd talk <folder> <brief...>                    a Quarto revealjs talk (quarto-books skill)
-#   herd code <machine> [--cwd <dir>] <task...>      a coding agent on a cluster's login node
+#   herd review <machine> <pr|url> [/review flags...]   multi-agent PR review (pi-ext /review); nothing is posted
+#   herd code <machine> [--cwd <dir>] <task...>          a coding agent
+#   herd talk <folder> <brief...>                        a Quarto revealjs talk, on this computer
 #
+# <machine>: `local` (this computer) or a Herdr machine (hc machine ls).
 # Options before the kind: --space <name> puts the tab in that Herdr space
 # (default: a space on the right machine; a new one if there is none).
 set -euo pipefail
@@ -28,9 +29,20 @@ folder=""
 tab=""
 pi_args=()
 
+# Remote machines must have pi-ext: /review lives there, and slurm-guard must be loaded.
+use_machine() {
+    machine=$1
+    if [ "$machine" = local ]; then machine=""; return; fi
+    hc machine ls --json | grep -q "\"name\":\"$machine\"" || die "no Herdr machine '$machine' (hc machine ls)"
+    hc exec --on "$machine" test -d .local/share/pi-ext/extensions/slurm-guard ||
+        die "$machine has no pi-ext (slurm-guard, /review); run sync-logins $machine first"
+}
+cluster_rules="You run on a shared cluster login node. Never start, attach to or change scheduler jobs and never ssh to compute nodes; slurm-guard enforces this. Draft job scripts for the user to submit. Keep builds small (make -j4, CARGO_BUILD_JOBS=4)."
+
 case "$kind" in
 review)
-    [ $# -ge 1 ] || usage
+    [ $# -ge 2 ] || usage
+    use_machine "$1"; shift
     tab="review ${1##*/}"
     pi_args=(--name "$tab" "/review $*")
     ;;
@@ -46,15 +58,13 @@ Start by asking me the audience, length and the one message the talk must land, 
     ;;
 code)
     [ $# -ge 2 ] || usage
-    machine=$1; shift
+    use_machine "$1"; shift
     if [ "${1:-}" = --cwd ]; then folder=$2; shift 2; fi
     [ $# -ge 1 ] || usage
-    hc machine ls --json | grep -q "\"name\":\"$machine\"" || die "no Herdr machine '$machine' (hc machine ls)"
-    # Never cut: on a cluster the agent must run with slurm-guard loaded.
-    hc exec --on "$machine" test -d .local/share/pi-ext/extensions/slurm-guard ||
-        die "$machine has no pi-ext (slurm-guard); run sync-logins $machine first"
     tab="code $(printf '%s' "$*" | tr -s ' ' | cut -c1-24)"
-    pi_args=(--name "$tab" --append-system-prompt "You run on $machine, a Slurm cluster login node, as a coding agent. Rules: never run srun, sbatch, salloc, sattach or scrun, never ssh to compute nodes, and never change jobs (scancel, scontrol update/hold/requeue). Draft job scripts for the user to submit. Keep builds small (make -j4, CARGO_BUILD_JOBS=4): login nodes are shared. Report what you changed and how you checked it." "$*")
+    rules="You are a coding agent. Report what you changed and how you checked it."
+    [ -n "$machine" ] && rules="$rules $cluster_rules"
+    pi_args=(--name "$tab" --append-system-prompt "$rules" "$*")
     ;;
 *) usage ;;
 esac
