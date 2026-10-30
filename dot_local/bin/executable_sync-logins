@@ -1,14 +1,16 @@
 #!/bin/bash
 # sync-logins: bring every Herdr machine (`hc machine ls`) up to date with this Mac:
 # chezmoi update (dotfiles + install scripts: node, pi, pi-ext deps), `pi update --all`,
-# then `hc machine update`. Machines run in parallel; logs go to
-# ~/.local/state/sync-logins/<machine>.log. Usage: sync-logins [machine...]
+# then `hc machine update`. Machines run in parallel, each limited to SYNC_TIMEOUT
+# seconds (default 1200); logs go to ~/.local/state/sync-logins/<machine>.log.
+# Usage: sync-logins [machine...]
 #
 # Machines pull from the git remotes, so push chezmoi and pi-ext first: the
 # preflight warns about uncommitted or unpushed work here.
 set -uo pipefail
 
 logs="${XDG_STATE_HOME:-$HOME/.local/state}/sync-logins"
+limit="${SYNC_TIMEOUT:-1200}"
 mkdir -p "$logs"
 
 # --- preflight: what the machines can't get yet ---
@@ -27,13 +29,24 @@ export PATH="$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.pi/agent/bi
 src="$HOME/.local/share/chezmoi"
 cz_state=skipped
 if [ -d "$src/.git" ]; then
-    if ! command -v chezmoi >/dev/null; then
-        echo "==> installing chezmoi to ~/bin"
-        sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/bin" || true
+    # Missing, or built for a newer glibc than this login has: use the static (musl) build.
+    if ! chezmoi --version >/dev/null 2>&1 && [ "$(uname -s)" = Linux ]; then
+        arch=$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/")
+        echo "==> installing static chezmoi ($arch) to ~/bin"
+        mkdir -p "$HOME/bin"
+        curl -fsSL -o "$HOME/bin/chezmoi.new" "https://github.com/twpayne/chezmoi/releases/latest/download/chezmoi-linux-$arch-musl" &&
+            chmod +x "$HOME/bin/chezmoi.new" && mv "$HOME/bin/chezmoi.new" "$HOME/bin/chezmoi"
+        hash -r
     fi
-    if command -v chezmoi >/dev/null; then
+    if chezmoi --version >/dev/null 2>&1; then
         echo "==> chezmoi update"
-        if chezmoi update --force --no-tty --refresh-externals=always </dev/null; then cz_state=ok; else cz_state=failed; fi
+        if chezmoi update --force --no-tty --refresh-externals=always </dev/null; then
+            cz_state=ok
+        else
+            # Usually a git external (pi-ext) this login can't clone: apply the rest anyway.
+            echo "==> chezmoi update failed; applying without externals"
+            if chezmoi apply --force --no-tty --exclude externals </dev/null; then cz_state=no-externals; else cz_state=failed; fi
+        fi
     else
         cz_state=no-chezmoi
     fi
@@ -69,8 +82,11 @@ sync_one() {
     {
         echo "### $(date) $name ($target)"
         # ControlPath=none: never ride an ssh master that points at another login node.
-        ssh -o BatchMode=yes -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none \
-            "$target" 'bash -l -s' <<<"$remote" 2>&1
+        # Remote `timeout` ends the whole job there (its process group), not just this ssh.
+        ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ControlMaster=no -o ControlPath=none \
+            "$target" "timeout -k 30 $limit bash -l -s" <<<"$remote" 2>&1
+        rc=$?
+        [ $rc = 124 ] && echo "TIMEOUT after ${limit}s"
         echo "==> hc machine update $name"
         hc machine update "$name" 2>&1
     } >"$log" 2>&1
@@ -87,10 +103,11 @@ status=0
 while IFS=$'\t' read -r name _; do
     line=$(grep -a '^RESULT ' "$logs/$name.log" | tail -1)
     if [ -z "$line" ]; then
-        line="unreachable or aborted: $(grep -av '^###' "$logs/$name.log" | tail -1)"
+        if grep -aq '^TIMEOUT' "$logs/$name.log"; then line="timed out after ${limit}s"
+        else line="unreachable or aborted: $(grep -av '^###' "$logs/$name.log" | tail -1)"; fi
         status=1
     fi
-    case "$line" in *failed*|*no-chezmoi*|*pi=missing*) status=1 ;; esac
+    case "$line" in *failed*|*no-chezmoi*|*no-externals*|*pi=missing*) status=1 ;; esac
     printf '%-8s %s\n' "$name" "${line#RESULT }"
 done <<<"$list"
 [ $status = 0 ] || echo "see $logs/<machine>.log for problems" >&2

@@ -38,11 +38,10 @@ This single command:
 1. Installs chezmoi
 2. Clones this repo
 3. Installs aqua (declarative CLI version manager)
-4. Installs rustup (Rust toolchain manager)
-5. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
-6. Installs all tools declared in aqua.yaml (gh, micro, etc.)
-7. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, Herdr)
-8. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`) and registers the personal pi package
+4. Deploys all config files (zshrc, micro, aqua.yaml, etc.)
+5. Installs all tools declared in aqua.yaml (gh, micro, etc.)
+6. Installs standalone tools not in aqua's registry (hf, Claude Code, pi, Herdr)
+7. Deploys personal agent skills to `~/.agents/skills/` (symlinked into `~/.claude/skills/`) and registers the personal pi package
 
 ## How it works
 
@@ -50,7 +49,6 @@ This single command:
 chezmoi apply
     |
     |-- run_once_before:  install aqua binary (first run only)
-    |-- run_once_before:  install rustup + stable Rust toolchain (first run only)
     |-- deploy files:     zshrc, micro config, aqua.yaml, etc.
     |-- run_onchange_after: aqua i -a (re-runs when aqua.yaml changes)
     |-- run_onchange_after: install hf CLI via uv (re-runs when aqua.yaml changes; installs/upgrades to the pinned minimum)
