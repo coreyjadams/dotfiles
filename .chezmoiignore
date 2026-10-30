@@ -34,6 +34,3 @@ pi/**
 .config/herdr-app/**
 {{- end }}
 
-# Python bytecode caches (written beside scripts that get imported)
-**/__pycache__
-**/__pycache__/**
