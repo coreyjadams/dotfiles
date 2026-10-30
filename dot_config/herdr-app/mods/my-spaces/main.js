@@ -5,7 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, home } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -65,6 +65,11 @@ export default class Spaces extends View {
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
+    // Setup health per machine (null = this computer), from each machine's own
+    // `login-health` (git remotes + npm as the reference). Badge only when stale.
+    this.health = JSON.parse(localStorage.getItem("machines.health") ?? "{}");
+    cx.timer.after(5000, cx => this.refreshHealth(cx));
+    cx.timer.every(30 * 60000, cx => this.refreshHealth(cx));
     // `git status` walks the whole tree, on another machine a process there:
     // only when its answer could have changed (see `due`).
     cx.timer.every(250, (cx) => this.checkNew(cx));
@@ -127,6 +132,38 @@ export default class Spaces extends View {
   }
 
   // One look at a time, each place once however often it was asked for meanwhile.
+  refreshHealth(cx) {
+    cx.spawn(async (cx) => {
+      const names = [null, ...this.machines.filter(m => m.state === "connected").map(m => m.name)];
+      await Promise.all(names.map(async (m) => {
+        try {
+          const r = await exec("bash", ["-lc", "$HOME/.local/bin/login-health"], m ? { on: m } : {});
+          if (r.code === 127) this.health[m ?? "local"] = ["no login-health yet (sync)"];
+          else if (r.code === 0) this.health[m ?? "local"] = JSON.parse(r.stdout.trim().split("\n").pop()).problems ?? [];
+        } catch {} // away: keep the last answer
+      }));
+      localStorage.setItem("machines.health", JSON.stringify(this.health));
+      cx.notify();
+    });
+  }
+
+  // A small amber "!" when a machine's setup is stale; click syncs it in a new tab.
+  badge(m, t) {
+    const problems = this.health[m ?? "local"] ?? [];
+    if (!problems.length) return null;
+    const name = m ?? "local";
+    return div().id(`health-${name}`).flex_none().px(4).rounded(4).text_size(10.5).font_semibold()
+      .text_color(t.blocked ?? t.accent).cursor_pointer().hover(s => s.bg(t.hover))
+      .tooltip(`${problems.join("; ")} \u2014 click to sync`)
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        // sync-logins runs from this computer, so open the tab in a local space.
+        const here = spaces().find(s => !s.machine);
+        run("tab.new", { ...(here ? { space: here.id, folder: home() } : {}), name: `sync ${name}`, argv: ["bash", "-lc", `sync-logins ${name}; echo; read -n1 -p 'done; any key closes'`] });
+      })
+      .child("!");
+  }
+
   refreshGit(keys, cx) {
     for (const k of keys) this.pending.add(k);
     if (this.refreshing) return;
@@ -251,6 +288,7 @@ export default class Spaces extends View {
         })
         .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
         .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
+          .when(Boolean(this.badge(m, t)), el => el.child(this.badge(m, t)))
           .when(!connected, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", m ? { machine: m } : {}); }).child("+")))
@@ -268,7 +306,7 @@ export default class Spaces extends View {
       return div().id(`machine-chip-${m}`).px(5).py(1).rounded(4).text_color(up ? t.dim : t.muted)
         .when(up, el => el.cursor_pointer().hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new", { machine: m })))
-        .child(m);
+        .child(h_flex().gap(2).child(m).when(Boolean(this.badge(m, t)), el => el.child(this.badge(m, t))));
     };
     return [...blocks, h_flex().id("machine-idle").flex_none().flex_wrap().px(6).py(4).gap(2).items_center().text_size(11)
       .child(svg("mods/workspace-chrome/plus.svg").size(11).flex_none().text_color(t.dim).mr(2))

@@ -68,6 +68,16 @@ harmlessly; add the machine from the Mac instead, which copies `hc` over ssh:
 updates every Herdr machine: `chezmoi update`, `pi update --all` and
 `hc machine update`, in parallel, with a summary table and logs in
 `~/.local/state/sync-logins/`.
+`login-health` (on every machine) prints one JSON line: chezmoi and pi-ext
+behind/ahead/dirty against their own git remotes, and pi against npm's latest.
+No machine is the source of truth. The Herdr `my-spaces` mod runs it on each
+machine every 30 minutes and shows a `!` on a machine only when something is
+stale; clicking it runs `sync-logins <machine>` (or `local`) in a tab.
+
+`herd` starts ready-made pi agents in Herdr tabs: `herd review <pr>` (pi-ext
+`/review`, never posts), `herd talk <folder> <brief>` (Quarto revealjs via the
+quarto-books skill), `herd code <machine> <task>` (a login-node coding agent;
+refuses machines without pi-ext's slurm-guard).
 
 ### Tool management with aqua
 

@@ -1,0 +1,49 @@
+#!/bin/bash
+# login-health: one JSON line about how current this machine's agent setup is,
+# judged against the git remotes and the npm registry, not against any one machine.
+#   {"host":…, "repos":{"chezmoi":{…},"pi-ext":{…}}, "pi":{"have":…,"latest":…}, "problems":[…]}
+# Each repo: head, behind/ahead of its upstream (after a fetch), dirty file count,
+# fetch=ok|failed|none. `problems` is empty when everything is current; the Herdr
+# my-spaces mod shows a badge only then. Read-only apart from `git fetch`.
+export PATH="$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.pi/agent/bin:${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua/bin:$PATH"
+export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+
+problems=()
+repos=""
+repo_json() { # name dir; appends to $repos (no subshell, so $problems sticks)
+    local name=$1 dir=$2 fetch=none behind=0 ahead=0 dirty=0 head=-
+    if [ ! -d "$dir/.git" ]; then
+        problems+=("$name missing")
+        repos="$repos${repos:+,}\"$name\":{\"present\":false}"
+        return
+    fi
+    head=$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo -)
+    if git -C "$dir" rev-parse '@{u}' >/dev/null 2>&1; then
+        if git -C "$dir" fetch -q 2>/dev/null; then fetch=ok; else fetch=failed; problems+=("$name fetch failed"); fi
+        behind=$(git -C "$dir" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
+        ahead=$(git -C "$dir" rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
+    fi
+    dirty=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    [ "$behind" != 0 ] && problems+=("$name $behind behind")
+    [ "$ahead" != 0 ] && problems+=("$name $ahead unpushed")
+    [ "$dirty" != 0 ] && problems+=("$name $dirty uncommitted")
+    repos="$repos${repos:+,}$(printf '"%s":{"present":true,"head":"%s","behind":%s,"ahead":%s,"dirty":%s,"fetch":"%s"}' \
+        "$name" "$head" "$behind" "$ahead" "$dirty" "$fetch")"
+}
+
+repo_json chezmoi "$HOME/.local/share/chezmoi"
+repo_json pi-ext "$HOME/.local/share/pi-ext"
+
+have=$(pi --version 2>/dev/null || echo "")
+latest=$(curl -fsS --max-time 10 https://registry.npmjs.org/@earendil-works/pi-coding-agent/latest 2>/dev/null |
+    sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+if [ -z "$have" ]; then
+    problems+=("pi missing")
+elif [ -n "$latest" ] && [ "$have" != "$latest" ]; then
+    problems+=("pi $have < $latest")
+fi
+
+list=""
+for p in "${problems[@]}"; do list="$list${list:+,}\"$p\""; done
+printf '{"host":"%s","repos":{%s},"pi":{"have":"%s","latest":"%s"},"problems":[%s]}\n' \
+    "$(hostname -s)" "$repos" "$have" "$latest" "$list"

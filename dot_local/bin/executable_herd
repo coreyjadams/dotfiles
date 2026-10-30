@@ -1,0 +1,82 @@
+#!/bin/bash
+# herd: start a ready-made pi agent in a Herdr tab you can watch and steer.
+#
+#   herd review <pr|url> [/review flags...]          multi-agent PR review (pi-ext /review); nothing is posted
+#   herd talk <folder> <brief...>                    a Quarto revealjs talk (quarto-books skill)
+#   herd code <machine> [--cwd <dir>] <task...>      a coding agent on a cluster's login node
+#
+# Options before the kind: --space <name> puts the tab in that Herdr space
+# (default: a space on the right machine; a new one if there is none).
+set -euo pipefail
+
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+die() { echo "herd: $*" >&2; exit 1; }
+
+space_name=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --space) space_name=$2; shift 2 ;;
+        -h|--help) usage ;;
+        *) break ;;
+    esac
+done
+[ $# -ge 1 ] || usage
+kind=$1; shift
+
+machine=""   # empty: this computer
+folder=""
+tab=""
+pi_args=()
+
+case "$kind" in
+review)
+    [ $# -ge 1 ] || usage
+    tab="review ${1##*/}"
+    pi_args=(--name "$tab" "/review $*")
+    ;;
+talk)
+    [ $# -ge 2 ] || usage
+    folder=$(cd "$1" 2>/dev/null && pwd) || { mkdir -p "$1" && folder=$(cd "$1" && pwd); }
+    shift
+    brief="$*"
+    tab="talk $(basename "$folder")"
+    pi_args=(--name "$tab" "Build a talk as a Quarto revealjs presentation in $folder. Follow the quarto-books skill (audience, figures, live numbers with provenance). Brief: $brief
+
+Start by asking me the audience, length and the one message the talk must land, unless the brief already says. Then outline the slides and wait for my OK before writing them. Render with \`quarto render\` and check the result before you call a slide done.")
+    ;;
+code)
+    [ $# -ge 2 ] || usage
+    machine=$1; shift
+    if [ "${1:-}" = --cwd ]; then folder=$2; shift 2; fi
+    [ $# -ge 1 ] || usage
+    hc machine ls --json | grep -q "\"name\":\"$machine\"" || die "no Herdr machine '$machine' (hc machine ls)"
+    # Never cut: on a cluster the agent must run with slurm-guard loaded.
+    hc exec --on "$machine" test -d .local/share/pi-ext/extensions/slurm-guard ||
+        die "$machine has no pi-ext (slurm-guard); run sync-logins $machine first"
+    tab="code $(printf '%s' "$*" | tr -s ' ' | cut -c1-24)"
+    pi_args=(--name "$tab" --append-system-prompt "You run on $machine, a Slurm cluster login node, as a coding agent. Rules: never run srun, sbatch, salloc, sattach or scrun, never ssh to compute nodes, and never change jobs (scancel, scontrol update/hold/requeue). Draft job scripts for the user to submit. Keep builds small (make -j4, CARGO_BUILD_JOBS=4): login nodes are shared. Report what you changed and how you checked it." "$*")
+    ;;
+*) usage ;;
+esac
+
+# A space on the right machine: by name if given, else the first on that machine.
+space=$(herdr-app ls | python3 -c '
+import json, sys
+want_m, want_n = sys.argv[1] or None, sys.argv[2]
+for s in json.load(sys.stdin)["spaces"]:
+    if s.get("machine") == want_m and (not want_n or s["name"].lower() == want_n.lower()):
+        print(s["id"]); break' "$machine" "$space_name")
+
+# bash -l on the far side: pi lives in ~/bin or ~/.npm-global/bin on clusters.
+argv=$(python3 -c 'import json, sys; print(json.dumps(["bash", "-lc", "export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH; exec pi \"$@\"", "pi"] + sys.argv[1:]))' "${pi_args[@]}")
+
+args=(--name "$tab" --argv "$argv")
+[ -n "$folder" ] && args+=(--folder "$folder")
+if [ -n "$space" ]; then
+    herdr-app do tab.new --space "$space" "${args[@]}"
+else
+    new=(--tab "$tab" --argv "$argv")
+    [ -n "$folder" ] && new+=(--folder "$folder")
+    [ -n "$machine" ] && new+=(--machine "$machine")
+    herdr-app do space.new --name "${space_name:-${machine:-agents}}" "${new[@]}"
+fi

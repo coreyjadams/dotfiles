@@ -3,7 +3,7 @@
 # chezmoi update (dotfiles + install scripts: node, pi, pi-ext deps), `pi update --all`,
 # then `hc machine update`. Machines run in parallel, each limited to SYNC_TIMEOUT
 # seconds (default 1200); logs go to ~/.local/state/sync-logins/<machine>.log.
-# Usage: sync-logins [machine...]
+# Usage: sync-logins [machine...]   (`local` = this computer; only when named)
 #
 # Machines pull from the git remotes, so push chezmoi and pi-ext first: the
 # preflight warns about uncommitted or unpushed work here.
@@ -73,7 +73,7 @@ for m in json.load(sys.stdin)["machines"]:
     if not m.get("temporary") and not m.get("via"):
         print(m["name"] + "\t" + m["target"])')
 if [ $# -gt 0 ]; then
-    list=$(printf '%s\n' "$list" | awk -F'\t' -v want=" $* " 'index(want, " " $1 " ")')
+    list=$(printf 'local\tlocal\n%s\n' "$list" | awk -F'\t' -v want=" $* " 'index(want, " " $1 " ")')
 fi
 [ -n "$list" ] || { echo "no machines to sync" >&2; exit 1; }
 
@@ -81,6 +81,10 @@ sync_one() {
     local name=$1 target=$2 log="$logs/$1.log"
     {
         echo "### $(date) $name ($target)"
+        if [ "$name" = local ]; then
+            bash -l -s <<<"$remote" 2>&1
+            return
+        fi
         # ControlPath=none: never ride an ssh master that points at another login node.
         # Remote `timeout` ends the whole job there (its process group), not just this ssh.
         ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ControlMaster=no -o ControlPath=none \
