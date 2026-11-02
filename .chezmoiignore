@@ -28,8 +28,9 @@ pi/**
 .local/share/bash-completion/**
 {{- end }}
 
-{{- if ne .chezmoi.os "darwin" }}
-# Herdr app config (mods, layout): only the Mac runs the window; clusters run headless hc.
+{{- if not (or (eq .chezmoi.os "darwin") (lookPath "herdr-app")) }}
+# Herdr app config (mods, layout, keys): only where the window runs (the Mac, a Linux
+# laptop with the app); clusters run headless hc.
 .config/herdr-app
 .config/herdr-app/**
 {{- end }}
