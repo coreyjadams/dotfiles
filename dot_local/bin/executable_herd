@@ -7,16 +7,20 @@
 #
 # <machine>: `local` (this computer) or a Herdr machine (hc machine ls).
 # Options before the kind: --space <name> puts the tab in that Herdr space
-# (default: a space on the right machine; a new one if there is none).
+# (default: a space on the right machine; a new one if there is none);
+# --todo <id> links the session to that to-do (^id in Herdr's to-do panel).
 set -euo pipefail
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 die() { echo "herd: $*" >&2; exit 1; }
 
 space_name=""
+todo=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --space) space_name=$2; shift 2 ;;
+        --todo) todo=${2#^}; shift 2
+            [[ "$todo" =~ ^[a-z0-9]{1,8}$ ]] || die "bad to-do id '$todo'" ;;
         -h|--help) usage ;;
         *) break ;;
     esac
@@ -78,7 +82,8 @@ for s in json.load(sys.stdin)["spaces"]:
         print(s["id"]); break' "$machine" "$space_name")
 
 # bash -l on the far side: pi lives in ~/bin or ~/.npm-global/bin on clusters.
-argv=$(python3 -c 'import json, sys; print(json.dumps(["bash", "-lc", "export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH; exec pi \"$@\"", "pi"] + sys.argv[1:]))' "${pi_args[@]}")
+# PI_TODO: herdr-report labels the session pi.todo=<id>, and the to-do panel records it.
+argv=$(python3 -c 'import json, sys; print(json.dumps(["bash", "-lc", "export PATH=$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH" + ("; export PI_TODO=" + sys.argv[1] if sys.argv[1] else "") + "; exec pi \"$@\"", "pi"] + sys.argv[2:]))' "$todo" "${pi_args[@]}")
 
 args=(--name "$tab" --argv "$argv")
 [ -n "$folder" ] && args+=(--folder "$folder")

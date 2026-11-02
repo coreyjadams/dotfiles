@@ -51,6 +51,7 @@ export function piSessions(all, shown, spaceList = []) {
         status: shown.get(t.address) ?? word(t.status),
         subs: subagentsOf(t),
         cost: Number(t.labels?.["pi.cost"]) || 0,
+        todo: t.labels?.["pi.todo"] || null,
         spaceId: space?.id,
         spaceName: space?.name ?? NO_SPACE,
       };
@@ -164,6 +165,7 @@ export default class PiBoard extends View {
         .on_click(() => this.open(s))
         .child(this.dot(t, s.status))
         .child(div().flex_1().min_w(0).truncate().text_color(s.task === UNNAMED ? t.muted : t.foreground).child(s.task === UNNAMED ? base(s.cwd) || s.address : s.task))
+        .when(Boolean(s.todo), (el) => el.child(small(`^${s.todo}`, t.accent)))
         .when(s.cost > 0, (el) => el.child(small(money(s.cost), t.muted)))
         .child(small(byMachine ? s.spaceName : s.machine, t.dim));
 

@@ -4,7 +4,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { hc, exec, home, spaces, theme, props, closeOverlay, pickFolder } from "herdr";
+import { hc, exec, home, spaces, theme, props, closeOverlay, pickFolder, readTextFile } from "herdr";
 
 const KINDS = ["review", "talk", "code"];
 const FIELDS = {
@@ -18,8 +18,8 @@ export function splitArgs(s) {
   return [...(s ?? "").matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 }
 
-export function herdArgs(kind, v, machine, space) {
-  const pre = space ? ["--space", space] : [];
+export function herdArgs(kind, v, machine, space, todo = null) {
+  const pre = [...(space ? ["--space", space] : []), ...(todo ? ["--todo", todo] : [])];
   if (kind === "review") return [...pre, "review", machine, v.pr.trim(), ...splitArgs(v.flags)];
   if (kind === "talk") return [...pre, "talk", v.folder.trim(), v.brief.trim()];
   return [...pre, "code", machine, ...(v.cwd.trim() ? ["--cwd", v.cwd.trim()] : []), v.task.trim()];
@@ -48,6 +48,20 @@ export default class HerdLauncher extends View {
     this.guarded = {};    // machine -> has slurm-guard (true/false), undefined while checking
     this.machine = "local"; // review and code: "local" or a Herdr machine
     this.space = null;    // space name, null: herd's default
+    this.todo = props()?.todo ?? null; // to-do id to link, null: none
+    this.todos = [];      // open to-dos with an id: [{ id, text, project }]
+    cx.spawn(async (cx) => {
+      const text = (await readTextFile(`${home()}/todo/todo.md`).catch(() => null)) ?? "";
+      let project = "Inbox";
+      for (const l of text.split("\n")) {
+        const h = l.match(/^##\s+(.*?)\s*$/);
+        if (h) { project = h[1]; continue; }
+        const m = l.match(/^\s*[-*] \[ \] (.*)$/);
+        const id = m?.[1].match(/(?:^|\s)\^([a-z0-9]{1,8})\b/)?.[1];
+        if (id) this.todos.push({ id, project, text: m[1].replace(/\s*\^[a-z0-9]+\b/, "").replace(/\s*due:\S+/, "").trim() });
+      }
+      cx.notify();
+    });
     this.error = null;
     this.busy = false;
     this.handle = cx.focus_handle();
@@ -85,7 +99,7 @@ export default class HerdLauncher extends View {
     this.busy = true;
     this.error = null;
     cx.notify();
-    const args = herdArgs(this.kind, this.values, this.machine, this.space);
+    const args = herdArgs(this.kind, this.values, this.machine, this.space, this.todo);
     cx.spawn(async (cx) => {
       // A login shell, so herd finds herdr-app, hc and python3 on the user's PATH.
       const r = await exec("bash", ["-lc", 'exec "$HOME/.local/bin/herd" "$@"', "herd", ...args])
@@ -142,6 +156,12 @@ export default class HerdLauncher extends View {
         })));
       body.child(label(name)).child(row);
     }
+    if (this.todos.length)
+      body.child(label("For to-do"))
+        .child(h_flex().flex_wrap().gap(6)
+          .child(chip("t-none", "none", this.todo === null, true, () => { this.todo = null; }))
+          .children(this.todos.map((d) => chip(`t-${d.id}`, `${d.text.slice(0, 28)}${d.text.length > 28 ? "…" : ""}`, this.todo === d.id, true,
+            () => { this.todo = d.id; }, `${d.project} · ^${d.id}`))));
     body.child(label("Space"))
       .child(h_flex().flex_wrap().gap(6)
         .child(chip("s-default", "default", this.space === null, true, () => { this.space = null; }, "first space on that machine, or a new one"))
@@ -164,7 +184,7 @@ export default class HerdLauncher extends View {
       .child(body)
       .when(Boolean(this.error), (el) => el.child(div().pt(10).text_size(12).text_color(t.blocked ?? t.accent).child(this.error)))
       .child(h_flex().pt(18).gap(8).items_center()
-        .child(div().flex_1().text_size(11).text_color(t.dim).child("runs: herd " + herdArgs(this.kind, this.values, this.machine ?? "<machine>", this.space).join(" ").slice(0, 70)))
+        .child(div().flex_1().text_size(11).text_color(t.dim).child("runs: herd " + herdArgs(this.kind, this.values, this.machine ?? "<machine>", this.space, this.todo).join(" ").slice(0, 70)))
         .child(button("cancel", "Cancel", false, () => closeOverlay(p.overlay)))
         .child(button("start", this.busy ? "Starting…" : "Start", true, (_e, cx) => this.busy || this.start(cx))));
   }

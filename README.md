@@ -80,8 +80,11 @@ quarto-books skill), `herd code <machine|local> <task>` (a coding agent; on a cl
 refuses machines without pi-ext's slurm-guard). In Herdr: cmd-shift-a or "+ agent" in pi tasks opens the same as a form (mod `herd-launcher`).
 
 To-do list: Herdr's right-hand column (mod `todo`, toggle with cmd-shift-y)
-shows `~/todo/todo.md`, a markdown checklist with `## <project>` sections. Pi
-agents edit the same file through the `todo` skill.
+shows `~/todo/todo.md`, a markdown checklist with `## <project>` sections, items
+`- [ ] text ^id due:YYYY-MM-DD`, and linked pi sessions as indented
+`- pi <machine> "<name>" <file>` lines. Link a session with `/todo link <id>` in
+pi, `herd --todo <id>` (or the launcher's to-do picker), or right-click an item →
+attach. Only you tick items; pi agents edit the file through the `todo` skill.
 
 ### Tool management with aqua
 
