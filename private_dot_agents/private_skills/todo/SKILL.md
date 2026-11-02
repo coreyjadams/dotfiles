@@ -26,9 +26,9 @@ shows it live, so edit the file and the panel follows.
 
 - Add: append `- [ ] text ^id` under the project's section (a fresh unique id;
   a `due:` date only if he gave one), creating the section at the end if needed.
-- Link this session to an item: run `/todo link <id>` is for him; you link by
-  telling him "run `/todo link <id>`", or if he asked you to, run
-  `hc label $HC_TERMINAL_ID pi.todo=<id>`. The panel records it within seconds.
+- Link this session to an item when he asks ("this is for q7"): run
+  `hc label $HC_TERMINAL_ID pi.todo=<id>` (the same as his `/todo link <id>`).
+  The panel records the link within seconds.
 - **Never tick an item off.** Only Corey ticks items. When your work finishes an
   item, say which one (`^id`) so he can tick it.
 - Never delete or reword items or sections, and never change his due dates
