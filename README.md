@@ -79,6 +79,10 @@ stale; clicking it runs `sync-logins <machine>` (or `local`) in a tab.
 quarto-books skill), `herd code <machine|local> <task>` (a coding agent; on a cluster it
 refuses machines without pi-ext's slurm-guard). In Herdr: cmd-shift-a or "+ agent" in pi tasks opens the same as a form (mod `herd-launcher`).
 
+To-do list: Herdr's right-hand column (mod `todo`, toggle with cmd-shift-y)
+shows `~/todo/todo.md`, a markdown checklist with `## <project>` sections. Pi
+agents edit the same file through the `todo` skill.
+
 ### Tool management with aqua
 
 Tools are declared in `dot_config/aquaproj-aqua/aqua.yaml` (deployed to `~/.config/aquaproj-aqua/aqua.yaml`). aqua downloads pre-built binaries from GitHub releases -- no package managers, no sudo.

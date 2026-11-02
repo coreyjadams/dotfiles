@@ -178,6 +178,28 @@
         }
       ],
       "resizable": false
+    },
+    {
+      "type": "column",
+      "id": "todo",
+      "size": {
+        "px": 260
+      },
+      "min": 200,
+      "max": 520,
+      "background": "chrome",
+      "children": [
+        {
+          "type": "block",
+          "id": "todo-list",
+          "content": {
+            "mod": "todo"
+          },
+          "size": {
+            "weight": 1
+          }
+        }
+      ]
     }
   ],
   "background": "canvas",
