@@ -77,9 +77,9 @@ stale; clicking it runs `sync-logins <machine>` (or `local`) in a tab.
 `herd` starts ready-made pi agents in Herdr tabs: `herd review <machine|local> <pr>` (pi-ext
 `/review`, never posts), `herd talk <folder> <brief>` (Quarto revealjs via the
 quarto-books skill), `herd code <machine|local> <task>` (a coding agent; on a cluster it
-refuses machines without pi-ext's slurm-guard). In Herdr: cmd-shift-a or "+ agent" in pi tasks opens the same as a form (mod `herd-launcher`).
+refuses machines without pi-ext's slurm-guard). In Herdr: cmd-shift-a (Linux: ctrl-shift-a) or "+ agent" in pi tasks opens the same as a form (mod `herd-launcher`).
 
-To-do list: Herdr's right-hand column (mod `todo`, toggle with cmd-shift-y)
+To-do list: Herdr's right-hand column (mod `todo`, toggle with cmd-shift-y, Linux ctrl-shift-y)
 shows `~/todo/todo.md`, a markdown checklist with `## <project>` sections, items
 `- [ ] text ^id due:YYYY-MM-DD`, and linked pi sessions as indented
 `- pi <machine> "<name>" <file>` lines. Link a session with `/todo link <id>` in
