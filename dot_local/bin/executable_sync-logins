@@ -28,16 +28,26 @@ remote=$(cat <<'EOF'
 export PATH="$HOME/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.pi/agent/bin:${XDG_DATA_HOME:-$HOME/.local/share}/aquaproj-aqua/bin:/snap/bin:$PATH"
 src="$HOME/.local/share/chezmoi"
 cz_state=skipped
-if [ -d "$src/.git" ]; then
-    # Missing, or built for a newer glibc than this login has: use the static (musl) build.
-    if ! chezmoi --version >/dev/null 2>&1 && [ "$(uname -s)" = Linux ]; then
+# Missing, or built for a newer glibc than this login has: use the static (musl) build.
+if ! chezmoi --version >/dev/null 2>&1 && [ "$(uname -s)" = Linux ]; then
         arch=$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/")
         echo "==> installing static chezmoi ($arch) to ~/bin"
         mkdir -p "$HOME/bin"
         curl -fsSL -o "$HOME/bin/chezmoi.new" "https://github.com/twpayne/chezmoi/releases/latest/download/chezmoi-linux-$arch-musl" &&
             chmod +x "$HOME/bin/chezmoi.new" && mv "$HOME/bin/chezmoi.new" "$HOME/bin/chezmoi"
         hash -r
-    fi
+fi
+# A new machine: first-time setup from the public repo. Its own shell files are kept aside.
+if [ ! -d "$src/.git" ] && chezmoi --version >/dev/null 2>&1; then
+    for f in .bashrc .bash_profile .gitconfig; do
+        [ -f "$HOME/$f" ] && [ ! -e "$HOME/$f.pre-chezmoi" ] && cp "$HOME/$f" "$HOME/$f.pre-chezmoi"
+    done
+    echo "==> chezmoi init (first sync on this machine)"
+    # Answers for .chezmoi.toml.tmpl's prompts come from the Mac (SYNC_PROMPTS).
+    # shellcheck disable=SC2086
+    chezmoi init --no-tty $SYNC_PROMPTS coreyjadams </dev/null || echo "chezmoi init failed"
+fi
+if [ -d "$src/.git" ]; then
     if chezmoi --version >/dev/null 2>&1; then
         echo "==> chezmoi update"
         if chezmoi update --force --no-tty --refresh-externals=always </dev/null; then
@@ -77,6 +87,11 @@ if [ $# -gt 0 ]; then
 fi
 [ -n "$list" ] || { echo "no machines to sync" >&2; exit 1; }
 
+# First-time `chezmoi init` prompts (lustre paths), answered with this user's usual values.
+# shortcut: the same paths on every cluster (true so far: coreai/coreai_modulus_cae); edit
+# ~/.config/chezmoi/chezmoi.toml on a cluster where they differ.
+prompts="--promptString user_lustre=/lustre/fsw/portfolios/coreai/users/$USER --promptString group_lustre=/lustre/fsw/portfolios/coreai/projects/coreai_modulus_cae"
+
 sync_one() {
     local name=$1 target=$2 log="$logs/$1.log"
     {
@@ -88,7 +103,7 @@ sync_one() {
         # ControlPath=none: never ride an ssh master that points at another login node.
         # Remote `timeout` ends the whole job there (its process group), not just this ssh.
         ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ControlMaster=no -o ControlPath=none \
-            "$target" "timeout -k 30 $limit bash -l -s" <<<"$remote" 2>&1
+            "$target" "SYNC_PROMPTS='$prompts' timeout -k 30 $limit bash -l -s" <<<"$remote" 2>&1
         rc=$?
         [ $rc = 124 ] && echo "TIMEOUT after ${limit}s"
         echo "==> hc machine update $name"
