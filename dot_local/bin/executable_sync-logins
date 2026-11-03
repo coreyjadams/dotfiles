@@ -30,11 +30,16 @@ src="$HOME/.local/share/chezmoi"
 cz_state=skipped
 # Missing, or built for a newer glibc than this login has: use the static (musl) build.
 if ! chezmoi --version >/dev/null 2>&1 && [ "$(uname -s)" = Linux ]; then
-        arch=$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/")
-        echo "==> installing static chezmoi ($arch) to ~/bin"
         mkdir -p "$HOME/bin"
-        curl -fsSL -o "$HOME/bin/chezmoi.new" "https://github.com/twpayne/chezmoi/releases/latest/download/chezmoi-linux-$arch-musl" &&
-            chmod +x "$HOME/bin/chezmoi.new" && mv "$HOME/bin/chezmoi.new" "$HOME/bin/chezmoi"
+        if [ "$(uname -m)" = x86_64 ]; then
+            echo "==> installing static chezmoi (amd64, musl) to ~/bin"
+            curl -fsSL -o "$HOME/bin/chezmoi.new" "https://github.com/twpayne/chezmoi/releases/latest/download/chezmoi-linux-amd64-musl" &&
+                chmod +x "$HOME/bin/chezmoi.new" && mv "$HOME/bin/chezmoi.new" "$HOME/bin/chezmoi"
+        else
+            # No musl build for arm64; the installer's arm64 build is static Go.
+            echo "==> installing chezmoi ($(uname -m)) to ~/bin"
+            sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/bin"
+        fi
         hash -r
 fi
 # A new machine: first-time setup from the public repo. Its own shell files are kept aside.
