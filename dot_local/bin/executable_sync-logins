@@ -48,9 +48,15 @@ if [ ! -d "$src/.git" ] && chezmoi --version >/dev/null 2>&1; then
         [ -f "$HOME/$f" ] && [ ! -e "$HOME/$f.pre-chezmoi" ] && cp "$HOME/$f" "$HOME/$f.pre-chezmoi"
     done
     echo "==> chezmoi init (first sync on this machine)"
-    # Answers for .chezmoi.toml.tmpl's prompts come from the Mac (SYNC_PROMPTS).
-    # shellcheck disable=SC2086
-    chezmoi init --no-tty $SYNC_PROMPTS coreyjadams </dev/null || echo "chezmoi init failed"
+    # .chezmoi.toml.tmpl's promptStringOnce reuses existing config values: seed them.
+    # shortcut: the same lustre paths on every cluster (true so far: coreai/coreai_modulus_cae);
+    # edit ~/.config/chezmoi/chezmoi.toml where they differ, then `chezmoi init`.
+    cfg="$HOME/.config/chezmoi/chezmoi.toml"
+    if [ ! -f "$cfg" ]; then
+        mkdir -p "$(dirname "$cfg")"
+        printf '[data]\n    user_lustre = "/lustre/fsw/portfolios/coreai/users/%s"\n    group_lustre = "/lustre/fsw/portfolios/coreai/projects/coreai_modulus_cae"\n' "$USER" >"$cfg"
+    fi
+    chezmoi init --no-tty coreyjadams </dev/null || echo "chezmoi init failed"
 fi
 if [ -d "$src/.git" ]; then
     if chezmoi --version >/dev/null 2>&1; then
@@ -92,11 +98,6 @@ if [ $# -gt 0 ]; then
 fi
 [ -n "$list" ] || { echo "no machines to sync" >&2; exit 1; }
 
-# First-time `chezmoi init` prompts (lustre paths), answered with this user's usual values.
-# shortcut: the same paths on every cluster (true so far: coreai/coreai_modulus_cae); edit
-# ~/.config/chezmoi/chezmoi.toml on a cluster where they differ.
-prompts="--promptString user_lustre=/lustre/fsw/portfolios/coreai/users/$USER --promptString group_lustre=/lustre/fsw/portfolios/coreai/projects/coreai_modulus_cae"
-
 sync_one() {
     local name=$1 target=$2 log="$logs/$1.log"
     {
@@ -108,7 +109,7 @@ sync_one() {
         # ControlPath=none: never ride an ssh master that points at another login node.
         # Remote `timeout` ends the whole job there (its process group), not just this ssh.
         ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ControlMaster=no -o ControlPath=none \
-            "$target" "SYNC_PROMPTS='$prompts' timeout -k 30 $limit bash -l -s" <<<"$remote" 2>&1
+            "$target" "timeout -k 30 $limit bash -l -s" <<<"$remote" 2>&1
         rc=$?
         [ $rc = 124 ] && echo "TIMEOUT after ${limit}s"
         echo "==> hc machine update $name"
