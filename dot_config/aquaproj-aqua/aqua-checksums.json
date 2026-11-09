@@ -431,6 +431,31 @@
       "algorithm": "sha256"
     },
     {
+      "id": "http/gitlab.com/gitlab-org/cli/-/releases/v1.128.0/downloads/glab_1.128.0_darwin_amd64.tar.gz",
+      "checksum": "741F8CE806751CF3E6381ACB39284DBE0EB8D5C44A3F4AB6BF78FD91EB362E0B",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "http/gitlab.com/gitlab-org/cli/-/releases/v1.128.0/downloads/glab_1.128.0_darwin_arm64.tar.gz",
+      "checksum": "541CDDE6A0F706B4B69FED9FB558B421A361F63408D072D78FFDF304AEE04248",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "http/gitlab.com/gitlab-org/cli/-/releases/v1.128.0/downloads/glab_1.128.0_linux_amd64.tar.gz",
+      "checksum": "BC024819E7598B19429A199CD87F640D98B2B67416D8AD796F19E4260B57A7C7",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "http/gitlab.com/gitlab-org/cli/-/releases/v1.128.0/downloads/glab_1.128.0_linux_arm64.tar.gz",
+      "checksum": "60D0512085A8C1BE7C5EF51AA7E4EE28213444CEA0376B3260707D90489199EA",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "http/gitlab.com/gitlab-org/cli/-/releases/v1.128.0/downloads/glab_1.128.0_windows_amd64.zip",
+      "checksum": "641D86AF5D72C17A7D79154A6436E9C68A54C69DB2172020CC4036E0776A4832",
+      "algorithm": "sha256"
+    },
+    {
       "id": "http/nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz",
       "checksum": "BED7EEA5325E1108F32CE5228DDD6A5F0F08A499EE42AA7442AEA583702F6057",
       "algorithm": "sha256"
